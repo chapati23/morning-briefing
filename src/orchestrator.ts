@@ -14,7 +14,7 @@ import type {
 // Core Orchestration
 // ============================================================================
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 45_000;
 
 const fetchWithTimeout = <T>(
   promise: Promise<T>,
