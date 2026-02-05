@@ -1,7 +1,6 @@
 # Cloud Storage bucket for ICS calendar files
 # These files are served directly via GCS CDN for instant downloads
 
-# trunk-ignore(trivy/GCP-0066): CMK encryption is overkill for public calendar files
 # trunk-ignore(checkov/CKV_GCP_114): Public access is intentional - ICS files must be downloadable via URL
 # trunk-ignore(checkov/CKV_GCP_62): Access logging adds complexity without benefit for public calendar files
 resource "google_storage_bucket" "ics_files" {
@@ -39,7 +38,7 @@ resource "google_storage_bucket" "ics_files" {
 }
 
 # Make bucket publicly readable for ICS file downloads
-# trunk-ignore(trivy/GCP-0001,checkov/CKV_GCP_28): Public access is intentional - ICS calendar URLs must be shareable
+# trunk-ignore(checkov/CKV_GCP_28): Public access is intentional - ICS calendar URLs must be shareable
 resource "google_storage_bucket_iam_member" "ics_public_read" {
   bucket = google_storage_bucket.ics_files.name
   role   = "roles/storage.objectViewer"
