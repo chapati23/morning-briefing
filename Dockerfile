@@ -26,7 +26,8 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 COPY src ./src
 COPY tsconfig.json ./
 
-# Cloud Run expects PORT env var
+# Production defaults
+ENV NODE_ENV=production
 ENV PORT=8080
 EXPOSE 8080
 

@@ -42,6 +42,11 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
 
       # Regular environment variables
       env {
+        name  = "NODE_ENV"
+        value = "production"
+      }
+
+      env {
         name  = "TIMEZONE"
         value = var.timezone
       }
