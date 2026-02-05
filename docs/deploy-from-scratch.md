@@ -49,7 +49,6 @@ Telegram. It runs on Google Cloud Platform using:
 
 - **Cloud Run** - Serverless container hosting
 - **Cloud Scheduler** - Daily trigger
-- **Cloud Storage** - ICS calendar files served via CDN for instant downloads
 - **Artifact Registry** - Docker image storage
 - **Secret Manager** - Secure credential storage
 - **GitHub Actions** - CI/CD pipeline
@@ -256,7 +255,6 @@ This creates:
 
 - Artifact Registry repository
 - Secret Manager secrets
-- Cloud Storage bucket (for ICS calendar files)
 - Cloud Run service (with your app image)
 - Cloud Scheduler job (triggers daily briefing)
 - Workload Identity Federation for GitHub Actions
@@ -427,7 +425,6 @@ Full list: <https://en.wikipedia.org/wiki/List_of_tz_database_time_zones>
 | ----------------- | -------------------------- | ------------------------ |
 | Cloud Run         | 2M requests, 360k vCPU-sec | ~30 requests/month       |
 | Cloud Scheduler   | 3 jobs                     | 1 job                    |
-| Cloud Storage     | 5 GB storage, 1 GB egress  | ~1 MB/month (ICS files)  |
 | Artifact Registry | 500 MB                     | ~500 MB (one image)      |
 | Secret Manager    | 6 secrets, 10k access ops  | 2 secrets, ~60 ops/month |
 
@@ -436,7 +433,6 @@ Full list: <https://en.wikipedia.org/wiki/List_of_tz_database_time_zones>
 ### What Could Cost Money
 
 - **Cloud Run**: If you trigger briefings very frequently (>60k times/month)
-- **Cloud Storage**: If ICS files are downloaded very frequently (>1GB egress/month)
 - **Artifact Registry**: If you keep many old image versions (>500MB)
 - **Network egress**: If you add many external API calls (first 1GB/month free)
 
@@ -525,7 +521,6 @@ This removes:
 
 - Cloud Run service
 - Cloud Scheduler job
-- Cloud Storage bucket (and all ICS files)
 - Artifact Registry (and all images)
 - Secret Manager secrets
 - Workload Identity Federation

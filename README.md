@@ -47,14 +47,13 @@ bun dev
 
 ## Architecture
 
-| Component         | Purpose                         |
-| ----------------- | ------------------------------- |
-| Cloud Run         | Serverless container hosting    |
-| Cloud Scheduler   | Daily trigger (cron)            |
-| Cloud Storage     | ICS calendar files (CDN-backed) |
-| Artifact Registry | Docker image storage            |
-| Secret Manager    | Telegram credentials            |
-| GitHub Actions    | CI/CD (automatic deployments)   |
+| Component         | Purpose                       |
+| ----------------- | ----------------------------- |
+| Cloud Run         | Serverless container hosting  |
+| Cloud Scheduler   | Daily trigger (cron)          |
+| Artifact Registry | Docker image storage          |
+| Secret Manager    | Telegram credentials          |
+| GitHub Actions    | CI/CD (automatic deployments) |
 
 ## Commands
 
