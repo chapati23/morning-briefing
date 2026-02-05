@@ -19,6 +19,7 @@ const cfg = config();
 
 const server = Bun.serve({
   port: cfg.port,
+  idleTimeout: 300, // 5 minutes - briefing takes 30+ seconds with Puppeteer
 
   async fetch(req) {
     const url = new URL(req.url);
