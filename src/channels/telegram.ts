@@ -37,7 +37,7 @@ export const createTelegramChannel = (
 // Formatting
 // ============================================================================
 
-export const SECTION_SEPARATOR = "──────────────";
+const SECTION_SEPARATOR = "─────────────────";
 
 // Pattern to detect "Label: $Value" format (e.g., "BTC ETFs: +$145.2M")
 // For these items, only the value part should be linked, not the label
