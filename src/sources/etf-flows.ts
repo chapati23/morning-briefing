@@ -264,9 +264,6 @@ const fetchETFFlowsFromBrowser = async (
     await page.setViewport({ width: 1920, height: 1080 });
 
     // Set realistic headers to avoid bot detection
-    // Using browser context to set user agent (preferred over deprecated page.setUserAgent)
-    const browserContext = page.browserContext();
-    await browserContext.overridePermissions(url, []);
     await page.setExtraHTTPHeaders({
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
