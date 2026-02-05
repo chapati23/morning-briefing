@@ -202,19 +202,15 @@ const formatEventDetail = (event: TradingViewEvent): string | undefined => {
   const parts: string[] = [];
 
   if (event.actual !== null) {
-    parts.push(`Actual: ${formatValue(event.actual, event.unit, event.scale)}`);
+    parts.push(`Act: ${formatValue(event.actual, event.unit, event.scale)}`);
   }
 
   if (event.forecast !== null) {
-    parts.push(
-      `Forecast: ${formatValue(event.forecast, event.unit, event.scale)}`,
-    );
+    parts.push(`Fcst: ${formatValue(event.forecast, event.unit, event.scale)}`);
   }
 
   if (event.previous !== null) {
-    parts.push(
-      `Previous: ${formatValue(event.previous, event.unit, event.scale)}`,
-    );
+    parts.push(`Prev: ${formatValue(event.previous, event.unit, event.scale)}`);
   }
 
   return parts.length > 0 ? parts.join(" | ") : undefined;
@@ -251,13 +247,13 @@ export const mockEconomicCalendarSource: DataSource = {
     items: [
       {
         text: "8:30 AM EST: 🇺🇸 Nonfarm Payrolls",
-        detail: "Forecast: 180K | Previous: 227K",
+        detail: "Fcst: 180K | Prev: 227K",
         sentiment: "neutral",
         url: "https://www.tradingview.com/economic-calendar/",
       },
       {
         text: "10:00 AM EST: 🇺🇸 ISM Manufacturing PMI",
-        detail: "Forecast: 48.2 | Previous: 48.4",
+        detail: "Fcst: 48.2 | Prev: 48.4",
         sentiment: "neutral",
         url: "https://www.tradingview.com/economic-calendar/",
       },

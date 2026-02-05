@@ -37,9 +37,9 @@ export const createTelegramChannel = (
 // Formatting
 // ============================================================================
 
-const SECTION_SEPARATOR = "──────────────";
+export const SECTION_SEPARATOR = "──────────────";
 
-const formatBriefingForTelegram = (briefing: Briefing): string => {
+export const formatBriefingForTelegram = (briefing: Briefing): string => {
   const lines: string[] = [];
 
   // Header
@@ -79,7 +79,7 @@ const formatBriefingForTelegram = (briefing: Briefing): string => {
   return lines.join("\n");
 };
 
-const formatSection = (section: BriefingSection): string => {
+export const formatSection = (section: BriefingSection): string => {
   const lines: string[] = [];
 
   // Title
@@ -103,37 +103,34 @@ const formatSection = (section: BriefingSection): string => {
     const indent = isSubItem ? "   " : "";
 
     const sentiment = getSentimentEmoji(item.sentiment);
-    const formattedText = formatTextWithMonospace(text);
 
     let line: string;
 
     // Calendar items: put calendar icon + time as one clickable link at the start
+    // No arrow link needed - TradingView URL is in the calendar event description
     if (item.calendarUrl && item.time) {
       const timeStr = formatTime(item.time);
       const calendarLink = `[${escapeMarkdown(timeStr)}](${escapeUrlForMarkdown(item.calendarUrl)})`;
+      const formattedText = formatTextWithMonospace(text);
       line = `${indent}${bullet} ${calendarLink} ${formattedText}`;
 
       if (sentiment) {
         line += ` ${sentiment}`;
       }
-
-      // Add arrow link to event details if available
-      if (item.url) {
-        line += ` [→](${escapeUrlForMarkdown(item.url)})`;
-      }
     } else {
-      // Non-calendar items: keep existing format
+      // Non-calendar items: link the title if URL is available
       const timeStr = item.time ? formatTime(item.time) : "";
       const timePrefix = timeStr ? `${escapeMarkdown(timeStr)} ` : "";
+
+      // Make the title itself clickable instead of adding an arrow link
+      const formattedText = item.url
+        ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
+        : formatTextWithMonospace(text);
 
       line = `${indent}${bullet} ${timePrefix}${formattedText}`;
 
       if (sentiment) {
         line += ` ${sentiment}`;
-      }
-
-      if (item.url) {
-        line += ` [→](${escapeUrlForMarkdown(item.url)})`;
       }
     }
 
@@ -160,7 +157,7 @@ const formatSection = (section: BriefingSection): string => {
   return lines.join("\n");
 };
 
-const getSentimentEmoji = (
+export const getSentimentEmoji = (
   sentiment?: "positive" | "negative" | "neutral",
 ): string => {
   switch (sentiment) {
@@ -176,7 +173,7 @@ const getSentimentEmoji = (
   }
 };
 
-const formatTime = (date: Date): string => {
+export const formatTime = (date: Date): string => {
   return date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
@@ -186,17 +183,17 @@ const formatTime = (date: Date): string => {
 };
 
 // Escape special characters for Telegram MarkdownV2
-const escapeMarkdown = (text: string): string => {
+export const escapeMarkdown = (text: string): string => {
   return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 };
 
 // Escape URLs for use inside MarkdownV2 links - only ) and \ need escaping
-const escapeUrlForMarkdown = (url: string): string => {
+export const escapeUrlForMarkdown = (url: string): string => {
   return url.replace(/([)\\])/g, "\\$1");
 };
 
 // Format text with monospace for financial values (e.g., +$145.2M, -$23.1M)
-const formatTextWithMonospace = (text: string): string => {
+export const formatTextWithMonospace = (text: string): string => {
   const parts = text.split(/([+-]?\$[\d,.]+[KMB]?)/g);
   return parts
     .map((part) => {
@@ -209,7 +206,7 @@ const formatTextWithMonospace = (text: string): string => {
 };
 
 // Escape characters inside code/monospace blocks (fewer chars need escaping)
-const escapeMarkdownInCode = (text: string): string => {
+export const escapeMarkdownInCode = (text: string): string => {
   return text.replace(/([`\\])/g, "\\$1");
 };
 
