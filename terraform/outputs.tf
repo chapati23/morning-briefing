@@ -32,13 +32,3 @@ output "region" {
   description = "GCP Region"
   value       = var.region
 }
-
-output "ics_bucket_name" {
-  description = "GCS bucket name for ICS calendar files"
-  value       = google_storage_bucket.ics_files.name
-}
-
-output "ics_bucket_url" {
-  description = "Public URL base for ICS calendar files"
-  value       = "https://storage.googleapis.com/${google_storage_bucket.ics_files.name}"
-}
