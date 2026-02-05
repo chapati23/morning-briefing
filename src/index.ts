@@ -4,7 +4,6 @@
  * Exposes endpoints for:
  * - POST /briefing - Trigger a briefing (called by Cloud Scheduler)
  * - GET /health - Health check
- * - POST /webhook/things - Receive Things todos from Apple Shortcut
  */
 
 // Load environment variables (for local dev; Cloud Run sets env vars directly)
@@ -63,19 +62,6 @@ const server = Bun.serve({
       }
     }
 
-    // Things webhook (for Apple Shortcut)
-    // Currently logs received todos; GCS storage deferred until webhook is actively used
-    if (url.pathname === "/webhook/things" && method === "POST") {
-      try {
-        const body = await req.json();
-        console.log("[webhook] Received Things todos:", JSON.stringify(body));
-        return Response.json({ success: true, received: true });
-      } catch (error) {
-        console.error("[webhook] Failed to process Things webhook:", error);
-        return Response.json({ error: "Invalid JSON body" }, { status: 400 });
-      }
-    }
-
     // 404 for everything else
     return Response.json({ error: "Not found" }, { status: 404 });
   },
@@ -86,4 +72,3 @@ console.log(`[server] Timezone: ${cfg.timezone}`);
 console.log(`[server] Endpoints:`);
 console.log(`  GET  /health         - Health check`);
 console.log(`  POST /briefing       - Trigger briefing`);
-console.log(`  POST /webhook/things - Receive Things todos`);
