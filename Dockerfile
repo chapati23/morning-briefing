@@ -22,7 +22,9 @@ COPY tsconfig.json ./
 
 # Skip Chrome download during bun install - base image already has Chrome
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-# Note: Don't set PUPPETEER_EXECUTABLE_PATH - let Puppeteer auto-detect from cache
+# Tell Puppeteer where the base image's Chrome cache is located
+# (Required because bun install runs as root, but Chrome is in pptruser's home)
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
 
 # Cloud Run expects PORT env var
 ENV PORT=8080
