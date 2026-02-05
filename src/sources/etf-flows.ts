@@ -23,7 +23,7 @@ const SOL_ETF_URL = "https://farside.co.uk/sol/";
  * Get the previous US market trading day, accounting for weekends and holidays.
  * ETF flow data is from the previous trading day since markets report EOD.
  */
-const getPreviousTradingDay = (date: Date): Date => {
+export const getPreviousTradingDay = (date: Date): Date => {
   const result = new Date(date);
   result.setDate(result.getDate() - 1); // Start with yesterday
 
@@ -35,7 +35,7 @@ const getPreviousTradingDay = (date: Date): Date => {
   return result;
 };
 
-const isTradingDay = (date: Date): boolean => {
+export const isTradingDay = (date: Date): boolean => {
   const day = date.getDay();
 
   // Weekend check (Saturday = 6, Sunday = 0)
@@ -51,7 +51,7 @@ const isTradingDay = (date: Date): boolean => {
  * Check if a date is a US stock market holiday.
  * Covers NYSE/NASDAQ holidays with observed day adjustments.
  */
-const isUSMarketHoliday = (date: Date): boolean => {
+export const isUSMarketHoliday = (date: Date): boolean => {
   const year = date.getFullYear();
   const month = date.getMonth(); // 0-indexed
   const day = date.getDate();
@@ -106,7 +106,7 @@ const isUSMarketHoliday = (date: Date): boolean => {
 /**
  * Calculate Easter Sunday using the Anonymous Gregorian algorithm.
  */
-const getEasterDate = (year: number): Date => {
+export const getEasterDate = (year: number): Date => {
   const a = year % 19;
   const b = Math.floor(year / 100);
   const c = year % 100;
@@ -125,7 +125,7 @@ const getEasterDate = (year: number): Date => {
   return new Date(year, month, day);
 };
 
-const getFlowSentiment = (
+export const getFlowSentiment = (
   value: number,
 ): "positive" | "negative" | "neutral" => {
   if (value > 0) return "positive";
@@ -133,7 +133,7 @@ const getFlowSentiment = (
   return "neutral";
 };
 
-const formatTradingDate = (date: Date): string => {
+export const formatTradingDate = (date: Date): string => {
   return date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
@@ -433,7 +433,7 @@ const parseETFTable = (html: string): ETFFlow[] => {
   return flows;
 };
 
-const parseFlowValue = (text: string): number | null => {
+export const parseFlowValue = (text: string): number | null => {
   if (!text || text === "-" || text === "") return null;
 
   // Check if value is negative (wrapped in parentheses like "(312.2)")
@@ -453,7 +453,7 @@ const parseFlowValue = (text: string): number | null => {
 // Formatting
 // ============================================================================
 
-const formatMillion = (value: number): string => {
+export const formatMillion = (value: number): string => {
   if (value === 0) return "$0";
   const absValue = Math.abs(value).toFixed(1);
   if (value > 0) return `+$${absValue}M`;

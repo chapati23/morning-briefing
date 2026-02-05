@@ -40,7 +40,7 @@ const CONFIG = {
 // Types
 // ============================================================================
 
-interface TopOutcome {
+export interface TopOutcome {
   readonly name: string;
   readonly probability: number;
   readonly change: number; // 24h change as decimal (0.10 = 10%)
@@ -235,7 +235,7 @@ const fetchAndParseMarkets = async (): Promise<ParsedMarket[]> => {
  * "Will Trump nominate Kevin Warsh..." -> "Warsh"
  * "US strikes Iran by February 5, 2026?" -> "Feb 5"
  */
-const extractOutcomeName = (question: string): string => {
+export const extractOutcomeName = (question: string): string => {
   // Pattern 1: Duration ranges "1-2 weeks", "3 to 4 days", "1 week or less"
   // These appear in shutdown, strike, and other time-based markets
   const durationPatterns = [
@@ -419,7 +419,7 @@ const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
 /**
  * Format a single outcome with its change indicator.
  */
-const formatOutcomeWithChange = (outcome: TopOutcome): string => {
+export const formatOutcomeWithChange = (outcome: TopOutcome): string => {
   const changePct = outcome.change * 100;
   if (!Number.isFinite(changePct) || Math.abs(changePct) < 1) {
     // No significant change or invalid data
@@ -511,7 +511,7 @@ const formatTopMarketItem = (market: ClassifiedMarket): BriefingItem => {
   };
 };
 
-const formatVolume = (volume: number): string => {
+export const formatVolume = (volume: number): string => {
   if (volume >= 1_000_000) {
     return `$${(volume / 1_000_000).toFixed(1)}M`;
   }
@@ -521,7 +521,7 @@ const formatVolume = (volume: number): string => {
   return `$${volume.toFixed(0)}`;
 };
 
-const truncate = (text: string, maxLength: number): string => {
+export const truncate = (text: string, maxLength: number): string => {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength - 3) + "...";
 };

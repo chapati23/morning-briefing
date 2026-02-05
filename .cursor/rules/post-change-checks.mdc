@@ -49,14 +49,21 @@ bun test tests/affected.test.ts
 
 ## When to Run Tests
 
-Run `bun test` when you modify a file that has an associated test file:
+Run tests when you modify a file that has associated test coverage:
 
-```bash
-# Changed src/foo.ts → check for tests/foo.test.ts
-# Changed src/orchestrator.ts → check for tests/orchestrator.test.ts
-```
+| Source File Changed | Test File(s) to Run |
+| --- | --- |
+| `src/orchestrator.ts` | `bun test tests/orchestrator.test.ts` |
+| `src/channels/telegram.ts` | `bun test tests/telegram.test.ts` |
+| `src/sources/polymarket.ts` | `bun test tests/polymarket.test.ts` |
+| `src/config/polymarket-correlations.ts` | `bun test tests/polymarket-correlations.test.ts` |
+| `src/sources/etf-flows.ts` | `bun test tests/trading-day.test.ts` |
+| `src/utils/cache.ts` | `bun test tests/cache.test.ts` |
+| Multiple source files / integration | `bun test tests/e2e/` |
 
 Use targeted test runs when possible: `bun test tests/<test-file>`
+
+**Note:** `tests/helpers.ts` contains shared test utilities (factory functions). If you modify it, run all tests: `bun test`
 
 ## Trunk Commands (Prefer Over Direct Linters)
 
