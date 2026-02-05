@@ -17,10 +17,9 @@ lint:
     - shfmt@3.6.0
     - terraform@1.1.0
     - tflint@0.60.0
-    - trivy@0.69.0
     - codespell@2.4.1
     - osv-scanner@2.3.2
-    - trufflehog@3.92.5
+    - trufflehog@3.93.0
     - eslint@9.39.2
     - prettier@3.8.1
     - markdownlint@0.47.0
