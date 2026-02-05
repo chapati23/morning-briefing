@@ -26,8 +26,6 @@ jobs:
           bun-version: latest
       - run: bun install --frozen-lockfile
       - uses: trunk-io/trunk-action@v1
-        with:
-          check-mode: all
       - run: bun run typecheck
       - run: bun run knip
       - run: bun run test:coverage
