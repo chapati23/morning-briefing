@@ -11,6 +11,12 @@ RUN npm install -g bun
 
 WORKDIR /app
 
+# Configure Puppeteer BEFORE install to use the correct cache location
+# The base image has Chrome pre-installed in pptruser's cache, but bun install
+# runs as root. Setting PUPPETEER_CACHE_DIR ensures Chrome is downloaded to
+# a location accessible at runtime.
+ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
+
 # Install dependencies (with BuildKit cache mount for faster rebuilds)
 COPY package.json bun.lockb* ./
 RUN --mount=type=cache,target=/root/.bun/install/cache \
@@ -19,12 +25,6 @@ RUN --mount=type=cache,target=/root/.bun/install/cache \
 # Copy source
 COPY src ./src
 COPY tsconfig.json ./
-
-# Skip Chrome download during bun install - base image already has Chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-# Tell Puppeteer where the base image's Chrome cache is located
-# (Required because bun install runs as root, but Chrome is in pptruser's home)
-ENV PUPPETEER_CACHE_DIR=/home/pptruser/.cache/puppeteer
 
 # Cloud Run expects PORT env var
 ENV PORT=8080

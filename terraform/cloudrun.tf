@@ -61,10 +61,10 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
         value = google_storage_bucket.ics_files.name
       }
 
-      # Puppeteer configuration
+      # Puppeteer configuration - point to Chrome cache from base image
       env {
-        name  = "PUPPETEER_EXECUTABLE_PATH"
-        value = "/usr/bin/google-chrome-stable"
+        name  = "PUPPETEER_CACHE_DIR"
+        value = "/home/pptruser/.cache/puppeteer"
       }
 
       ports {
