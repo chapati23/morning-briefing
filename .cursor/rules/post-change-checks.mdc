@@ -1,0 +1,118 @@
+---
+description: When and which checks to run after making code changes
+alwaysApply: true
+---
+
+# Post-Change Checks
+
+After making code changes, **always run appropriate checks** before considering the task complete.
+
+## Decision Tree
+
+| What Changed                           | Check to Run                                                       |
+| -------------------------------------- | ------------------------------------------------------------------ |
+| Only whitespace/formatting             | `trunk fmt`                                                        |
+| Config files only (.json, .yaml, .mdc) | `trunk check --fix` on changed files                               |
+| TypeScript/JavaScript code             | `bun run typecheck` + `trunk check --fix` + tests if applicable    |
+| Test files                             | `bun run typecheck` + `bun test` (or `bun test <file>`)            |
+
+## Before Running Tests: Analyze Impact
+
+**STOP and think** before running tests. Ask yourself:
+
+1. **What behavior changed?** (new fields, renamed functions, changed return types, etc.)
+2. **Which tests assert on that behavior?** (grep for function names, field names, expected values)
+3. **Do those tests need updates?** If yes, update them FIRST before running
+
+### Common patterns that break tests
+
+| Change Made                | Tests That Will Break                     |
+| -------------------------- | ----------------------------------------- |
+| Renamed/removed a function | Tests that call or mock that function     |
+| Changed function signature | Tests passing old argument patterns       |
+| Changed return type/shape  | Tests asserting on old structure          |
+| Added required field       | Tests creating objects without it         |
+| Changed error message      | Tests asserting on exact error text       |
+
+### Workflow
+
+```bash
+# 1. Identify affected tests
+rg "functionYouChanged" tests/
+
+# 2. Read and update those tests BEFORE running
+# 3. Then run targeted tests
+bun test tests/affected.test.ts
+```
+
+**Don't blindly run `bun test` hoping it passes** — anticipate failures and fix tests proactively.
+
+## When to Run Tests
+
+Run `bun test` when you modify a file that has an associated test file:
+
+```bash
+# Changed src/foo.ts → check for tests/foo.test.ts
+# Changed src/orchestrator.ts → check for tests/orchestrator.test.ts
+```
+
+Use targeted test runs when possible: `bun test tests/<test-file>`
+
+## Trunk Commands (Prefer Over Direct Linters)
+
+```bash
+# ✅ GOOD
+trunk fmt                              # Fast formatting only
+trunk check --fix                      # Full lint + format + fix
+trunk check --filter eslint --fix      # Targeted eslint only
+trunk check src/index.ts --fix         # Single file check
+
+# ❌ BAD - Don't invoke directly
+npx eslint .
+prettier --write .
+```
+
+## Workflow
+
+1. Make code changes
+2. Run `bun run typecheck` to catch type errors early
+3. Run `trunk check --fix` (or `trunk fmt` if formatting-only)
+4. If lint errors remain, fix them
+5. If changed file has tests, run `bun test`
+6. If tests fail, fix and re-run
+
+## Manual Verification
+
+Before presenting changes to the user, **actually run the feature yourself**:
+
+1. Run tests for the changed code
+2. Manually execute the feature with real inputs
+3. Verify the output is correct
+
+Don't just write code and ask the user to try it—confirm it works first.
+
+## Final Validation
+
+At the **end of a task or implementation**, run full project checks:
+
+```bash
+trunk check --all   # Ensure entire project is green
+bun test            # Run full test suite
+```
+
+Then manually verify the feature works with sample data before presenting to user.
+
+Only consider the task complete when:
+
+- All type checks pass (`bun run typecheck`)
+- All lints pass
+- All tests pass
+- You've manually verified the changes work
+
+## Scoping Checks
+
+For large changes, scope checks to modified files:
+
+```bash
+trunk check --fix src/index.ts src/types.ts
+```

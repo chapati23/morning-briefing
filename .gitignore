@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+
+# Environment files with secrets
+.env
+.env.local
+.env.production
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Bun
+bun.lockb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+coverage/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/*.tfvars
+
+# Docker
+.docker/
+
+# Logs
+*.log
+
+# Local cache (development)
+.cache/
+
+# direnv (project-specific environment)
+.envrc

@@ -1,0 +1,10 @@
+# Auto-configure GCloud CLI when entering this directory
+# Copy this file to .envrc and update with your project ID, then run: direnv allow
+#
+# TIP: Run ./scripts/setup.sh to configure everything automatically!
+#
+export CLOUDSDK_CORE_PROJECT="your-gcp-project-id"
+export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"
+
+# Terraform service account credentials (created by setup.sh)
+export GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/morning-briefing-terraform-sa-key.json"

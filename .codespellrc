@@ -1,0 +1,3 @@
+[codespell]
+# Ignore ticker symbols and other domain-specific terms
+ignore-words-list = ethe,dota,serie,ons

@@ -1,0 +1,37 @@
+---
+description: Prefer Infrastructure as Code over manual CLI commands
+alwaysApply: true
+---
+
+# Infrastructure as Code Preference
+
+When working with infrastructure, cloud resources, or project setup:
+
+1. **Never suggest one-off manual CLI commands** for infrastructure changes
+2. **Always prefer Terraform** for cloud resource management
+3. **Use setup scripts** for bootstrap operations that can't be in Terraform
+
+## If a manual command is necessary
+
+When a prerequisite command must be run (e.g., enabling a bootstrap API):
+
+1. Add it to `scripts/setup.sh` or create a dedicated setup script
+2. Document it in the deploy guide
+3. Explain why it can't be automated via Terraform
+
+## Example
+
+```bash
+# ❌ BAD - Suggesting a one-off command
+gcloud services enable cloudresourcemanager.googleapis.com
+
+# ✅ GOOD - Add to setup script or Terraform
+# In terraform/main.tf or scripts/setup.sh with proper error handling
+```
+
+## Rationale
+
+- Reproducible deployments
+- Self-documenting infrastructure
+- Easier onboarding for new contributors
+- Prevents configuration drift

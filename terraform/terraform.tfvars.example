@@ -1,0 +1,13 @@
+# GCP Project Configuration
+project_id = "your-gcp-project-id"
+region     = "us-central1"
+
+# GitHub Repository (format: owner/repo)
+github_repo = "youruser/morning-briefing"
+
+# Schedule Configuration (cron syntax)
+schedule_cron = "0 8 * * *" # 8:00 AM daily
+
+# Note: Secrets (telegram_bot_token, telegram_chat_id, timezone) are read from
+# ../.env.local via the Makefile. Run `make plan` or `make apply` instead of
+# running terraform directly.

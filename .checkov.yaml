@@ -1,0 +1,7 @@
+# Checkov configuration
+# See: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
+
+# Skip CKV_GCP_125: OIDC trust policy check has known issues (bridgecrewio/checkov#6981)
+# Our workload identity is secure: restricted to specific repository AND main branch only
+skip-check:
+  - CKV_GCP_125
