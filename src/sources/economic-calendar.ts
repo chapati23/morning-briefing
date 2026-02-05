@@ -4,7 +4,8 @@
  * Fetches high-importance economic events from TradingView's Economic Calendar API.
  * https://www.tradingview.com/economic-calendar/
  *
- * Pre-generates ICS calendar files and uploads them to GCS for instant downloads.
+ * Pre-generates ICS calendar files and uploads them to GCS with webcal:// URLs
+ * so iOS opens them directly in the Calendar app.
  */
 
 import type { BriefingItem, BriefingSection, DataSource } from "../types";
@@ -78,7 +79,7 @@ const isGcsConfigured = (): boolean => {
 
 /**
  * Create a BriefingItem with a pre-generated ICS file uploaded to GCS.
- * Falls back gracefully if GCS is not configured (e.g., local development).
+ * Falls back to Google Calendar URLs if GCS upload fails (e.g., local development).
  */
 const createBriefingItemWithCalendar = async (
   event: TradingViewEvent,
@@ -86,6 +87,7 @@ const createBriefingItemWithCalendar = async (
 ): Promise<BriefingItem> => {
   const eventUrl = buildTradingViewUrl(event);
   const detail = formatEventDetail(event);
+  const eventDate = new Date(event.date);
 
   // Try to upload ICS to GCS if configured
   let calendarUrl: string | undefined;
@@ -102,22 +104,52 @@ const createBriefingItemWithCalendar = async (
       const gcsPath = getIcsPath(briefingDate, event.id);
       calendarUrl = await uploadIcsFile(icsContent, gcsPath);
     } catch (error) {
-      // Log but don't fail - calendar links are nice-to-have
+      // Log but don't fail - fall back to Google Calendar URL
       console.warn(
-        `[economic-calendar] Failed to upload ICS for ${event.id}:`,
-        error,
+        `[economic-calendar] Failed to upload ICS for ${event.id}, using Google Calendar fallback:`,
+        error instanceof Error ? error.message : error,
       );
     }
+  }
+
+  // Fallback to Google Calendar URL if GCS upload failed or isn't configured
+  if (!calendarUrl) {
+    calendarUrl = buildGoogleCalendarUrl(event, eventDate);
   }
 
   return {
     text: formatEventText(event),
     detail,
     sentiment: "neutral" as const,
-    time: new Date(event.date),
+    time: eventDate,
     url: eventUrl,
     calendarUrl,
   };
+};
+
+/**
+ * Build a Google Calendar URL for adding an event.
+ * Used as fallback when GCS is not available (local development).
+ */
+const buildGoogleCalendarUrl = (
+  event: TradingViewEvent,
+  startDate: Date,
+): string => {
+  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // +30 minutes
+  // Build URL manually to avoid URL-encoding the / in dates
+  const title = encodeURIComponent(event.title);
+  const dates = `${formatGoogleDate(startDate)}/${formatGoogleDate(endDate)}`;
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dates}`;
+};
+
+/**
+ * Format a Date for Google Calendar URL (YYYYMMDDTHHMMSSZ format).
+ */
+const formatGoogleDate = (date: Date): string => {
+  return date
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\.\d{3}/, "");
 };
 
 // ============================================================================

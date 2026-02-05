@@ -24,11 +24,32 @@ export const createTelegramChannel = (
   return {
     name: "telegram",
     send: async (briefing) => {
+      // Debug: log calendar URLs
+      for (const section of briefing.sections) {
+        for (const item of section.items) {
+          if (item.calendarUrl) {
+            console.log(
+              `[telegram] Calendar URL for "${item.text}": ${item.calendarUrl}`,
+            );
+          }
+        }
+      }
+
       const message = formatBriefingForTelegram(briefing);
-      await bot.api.sendMessage(cfg.chatId, message, {
+      console.log(`[telegram] Message length: ${message.length} chars`);
+      // Debug: dump full message to file
+      const fs = await import("node:fs");
+      fs.writeFileSync("/tmp/telegram-message.txt", message);
+      console.log(
+        `[telegram] Full message written to /tmp/telegram-message.txt`,
+      );
+      const result = await bot.api.sendMessage(cfg.chatId, message, {
         parse_mode: "MarkdownV2",
         link_preview_options: { is_disabled: true },
       });
+      console.log(
+        `[telegram] Message sent successfully, message_id: ${result.message_id}`,
+      );
     },
   };
 };
@@ -118,9 +139,9 @@ const formatSection = (section: BriefingSection): string => {
 
     // Add link - prefer calendar icon, fallback to arrow for regular links
     if (item.calendarUrl) {
-      line += ` [📅](${item.calendarUrl})`;
+      line += ` [📅](${escapeUrlForMarkdown(item.calendarUrl)})`;
     } else if (item.url) {
-      line += ` [→](${item.url})`;
+      line += ` [→](${escapeUrlForMarkdown(item.url)})`;
     }
 
     lines.push(line);
@@ -174,6 +195,11 @@ const formatTime = (date: Date): string => {
 // Escape special characters for Telegram MarkdownV2
 const escapeMarkdown = (text: string): string => {
   return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+};
+
+// Escape URLs for use inside MarkdownV2 links - only ) and \ need escaping
+const escapeUrlForMarkdown = (url: string): string => {
+  return url.replace(/([)\\])/g, "\\$1");
 };
 
 // Format text with monospace for financial values (e.g., +$145.2M, -$23.1M)
