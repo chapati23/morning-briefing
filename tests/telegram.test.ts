@@ -310,6 +310,26 @@ describe("formatSection", () => {
     expect(result).toContain("[Link item](https://example.com)");
   });
 
+  it("formats ETF-style item with only value+emoji linked", () => {
+    const section: BriefingSection = {
+      title: "Test",
+      icon: "📊",
+      items: [
+        {
+          text: "BTC ETFs: +$145.2M",
+          url: "https://farside.co.uk/btc/",
+          sentiment: "positive",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    // Label should NOT be linked, only the value and emoji
+    expect(result).toContain("BTC ETFs:");
+    expect(result).toContain("[`+$145.2M` 🟢](https://farside.co.uk/btc/)");
+    // Should NOT have the whole thing linked
+    expect(result).not.toContain("[BTC ETFs:");
+  });
+
   it("formats item with detail", () => {
     const section: BriefingSection = {
       title: "Test",

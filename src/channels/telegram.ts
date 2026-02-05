@@ -39,6 +39,10 @@ export const createTelegramChannel = (
 
 export const SECTION_SEPARATOR = "──────────────";
 
+// Pattern to detect "Label: $Value" format (e.g., "BTC ETFs: +$145.2M")
+// For these items, only the value part should be linked, not the label
+const LABELLED_VALUE_PATTERN = /^(.+?):\s*([+-]?\$[\d,.]+[KMB]?)$/;
+
 export const formatBriefingForTelegram = (briefing: Briefing): string => {
   const lines: string[] = [];
 
@@ -107,7 +111,6 @@ export const formatSection = (section: BriefingSection): string => {
     let line: string;
 
     // Calendar items: put calendar icon + time as one clickable link at the start
-    // No arrow link needed - TradingView URL is in the calendar event description
     if (item.calendarUrl && item.time) {
       const timeStr = formatTime(item.time);
       const calendarLink = `[${escapeMarkdown(timeStr)}](${escapeUrlForMarkdown(item.calendarUrl)})`;
@@ -122,15 +125,32 @@ export const formatSection = (section: BriefingSection): string => {
       const timeStr = item.time ? formatTime(item.time) : "";
       const timePrefix = timeStr ? `${escapeMarkdown(timeStr)} ` : "";
 
-      // Make the title itself clickable instead of adding an arrow link
-      const formattedText = item.url
-        ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
-        : formatTextWithMonospace(text);
+      // Check for "Label: $Value" pattern (e.g., "BTC ETFs: +$145.2M")
+      // For these items, only link the value part + sentiment emoji
+      const labelledMatch = text.match(LABELLED_VALUE_PATTERN);
 
-      line = `${indent}${bullet} ${timePrefix}${formattedText}`;
+      const label = labelledMatch?.[1];
+      const value = labelledMatch?.[2];
 
-      if (sentiment) {
-        line += ` ${sentiment}`;
+      if (label && value && item.url) {
+        const escapedLabel = escapeMarkdown(`${label}: `);
+        const formattedValue = `\`${escapeMarkdownInCode(value)}\``;
+        const linkContent = sentiment
+          ? `${formattedValue} ${sentiment}`
+          : formattedValue;
+        line = `${indent}${bullet} ${timePrefix}${escapedLabel}[${linkContent}](${escapeUrlForMarkdown(item.url)})`;
+        // Sentiment is already included in the link, don't add it again
+      } else {
+        // Regular items: link the whole text
+        const formattedText = item.url
+          ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
+          : formatTextWithMonospace(text);
+
+        line = `${indent}${bullet} ${timePrefix}${formattedText}`;
+
+        if (sentiment) {
+          line += ` ${sentiment}`;
+        }
       }
     }
 
