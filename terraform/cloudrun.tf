@@ -13,7 +13,8 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
 
       resources {
         limits = {
-          memory = "1Gi"
+          # 2Gi needed for running 3 Puppeteer instances in parallel
+          memory = "2Gi"
           cpu    = "1"
         }
       }
