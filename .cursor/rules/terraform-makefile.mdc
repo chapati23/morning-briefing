@@ -1,0 +1,37 @@
+---
+description: Use Makefile targets instead of raw terraform commands
+globs: terraform/**
+alwaysApply: false
+---
+
+# Terraform via Makefile
+
+Always use the Makefile in `terraform/` instead of running terraform commands directly.
+
+## Why
+
+The Makefile loads secrets from `.env.local` and injects them as `TF_VAR_*` environment variables. Running terraform directly will fail or prompt for missing variables.
+
+## Command Mapping
+
+| ❌ Don't use | ✅ Use instead |
+|--------------|----------------|
+| `terraform plan` | `make plan` |
+| `terraform apply` | `make apply` |
+| `terraform destroy` | `make destroy` |
+| `terraform init` | `make init` |
+
+## Workflow
+
+```bash
+cd terraform
+make plan    # Preview changes
+make apply   # Apply with approval prompt
+```
+
+## What Gets Injected
+
+The Makefile reads from `../.env.local` and sets:
+- `TF_VAR_telegram_bot_token`
+- `TF_VAR_telegram_chat_id`
+- `TF_VAR_timezone`
