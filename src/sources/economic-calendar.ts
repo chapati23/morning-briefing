@@ -70,7 +70,15 @@ export const economicCalendarSource: DataSource = {
 // ============================================================================
 
 /**
+ * Check if GCS is configured for ICS file uploads.
+ */
+const isGcsConfigured = (): boolean => {
+  return Boolean(process.env["GCS_BUCKET"]);
+};
+
+/**
  * Create a BriefingItem with a pre-generated ICS file uploaded to GCS.
+ * Falls back gracefully if GCS is not configured (e.g., local development).
  */
 const createBriefingItemWithCalendar = async (
   event: TradingViewEvent,
@@ -79,19 +87,28 @@ const createBriefingItemWithCalendar = async (
   const eventUrl = buildTradingViewUrl(event);
   const detail = formatEventDetail(event);
 
-  // Generate ICS content
-  const icsParams: IcsEventParams = {
-    id: event.id,
-    title: event.title,
-    date: event.date,
-    description: detail ? `${detail}\n\nDetails: ${eventUrl}` : eventUrl,
-    url: eventUrl,
-  };
-  const icsContent = generateIcsContent(icsParams);
-
-  // Upload to GCS and get public URL
-  const gcsPath = getIcsPath(briefingDate, event.id);
-  const calendarUrl = await uploadIcsFile(icsContent, gcsPath);
+  // Try to upload ICS to GCS if configured
+  let calendarUrl: string | undefined;
+  if (isGcsConfigured()) {
+    try {
+      const icsParams: IcsEventParams = {
+        id: event.id,
+        title: event.title,
+        date: event.date,
+        description: detail ? `${detail}\n\nDetails: ${eventUrl}` : eventUrl,
+        url: eventUrl,
+      };
+      const icsContent = generateIcsContent(icsParams);
+      const gcsPath = getIcsPath(briefingDate, event.id);
+      calendarUrl = await uploadIcsFile(icsContent, gcsPath);
+    } catch (error) {
+      // Log but don't fail - calendar links are nice-to-have
+      console.warn(
+        `[economic-calendar] Failed to upload ICS for ${event.id}:`,
+        error,
+      );
+    }
+  }
 
   return {
     text: formatEventText(event),
