@@ -19,14 +19,54 @@ When a prerequisite command must be run (e.g., enabling a bootstrap API):
 2. Document it in the deploy guide
 3. Explain why it can't be automated via Terraform
 
-## Example
+## Forbidden Commands
+
+These commands modify infrastructure state and must NEVER be used directly:
 
 ```bash
-# ❌ BAD - Suggesting a one-off command
-gcloud services enable cloudresourcemanager.googleapis.com
+# ❌ NEVER use these - they cause configuration drift
+gcloud run services update ...
+gcloud run services deploy ...
+gcloud run deploy ...
+gcloud compute ... create/update/delete
+gcloud sql ... create/update/delete
+gcloud storage buckets update ...
 
-# ✅ GOOD - Add to setup script or Terraform
-# In terraform/main.tf or scripts/setup.sh with proper error handling
+# ❌ BAD - Even for "quick fixes"
+gcloud run services update morning-briefing --memory=2Gi
+gcloud run services update morning-briefing --set-env-vars=FOO=bar
+```
+
+## Correct Workflow
+
+1. Edit the Terraform files (e.g., `terraform/cloudrun.tf`)
+2. Run `terraform plan` to preview changes
+3. Run `terraform apply` (with user approval)
+4. Commit the Terraform changes
+
+```bash
+# ✅ GOOD - Infrastructure changes via Terraform
+# 1. Edit terraform/cloudrun.tf
+# 2. cd terraform && make plan
+# 3. make apply (user approves)
+# 4. git add && git commit
+```
+
+## Bootstrap Commands Only
+
+The only acceptable manual `gcloud` commands are bootstrap/read-only operations:
+
+```bash
+# ✅ OK - Read-only queries
+gcloud run services logs read ...
+gcloud run revisions list ...
+gcloud run services describe ...
+
+# ✅ OK - Triggering existing jobs (no state change)
+gcloud scheduler jobs run ...
+
+# ✅ OK - Bootstrap (add to scripts/setup.sh)
+gcloud services enable cloudresourcemanager.googleapis.com
 ```
 
 ## Rationale
@@ -35,3 +75,4 @@ gcloud services enable cloudresourcemanager.googleapis.com
 - Self-documenting infrastructure
 - Easier onboarding for new contributors
 - Prevents configuration drift
+- **Terraform state stays in sync with actual infrastructure**
