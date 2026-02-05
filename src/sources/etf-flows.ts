@@ -141,6 +141,40 @@ export const formatTradingDate = (date: Date): string => {
   });
 };
 
+/**
+ * Build a briefing item for an ETF, handling both success and failure cases.
+ */
+export const buildETFItem = (
+  type: "BTC" | "ETH" | "SOL",
+  result: PromiseSettledResult<ETFFlow[]>,
+  url: string,
+): {
+  text: string;
+  sentiment: "positive" | "negative" | "neutral";
+  url: string;
+} => {
+  if (result.status === "fulfilled") {
+    const total = result.value.reduce((sum, f) => sum + f.flow, 0);
+    return {
+      text: `${type} ETFs: ${formatMillion(total)}`,
+      sentiment: getFlowSentiment(total),
+      url,
+    };
+  }
+
+  // Failed - show unavailable with neutral sentiment
+  const error =
+    result.reason instanceof Error
+      ? result.reason.message
+      : String(result.reason);
+  console.warn(`[etf-flows:${type}] Unavailable: ${error}`);
+  return {
+    text: `${type} ETFs: unavailable`,
+    sentiment: "neutral",
+    url,
+  };
+};
+
 // ============================================================================
 // Data Source
 // ============================================================================
@@ -154,15 +188,30 @@ export const etfFlowsSource: DataSource = {
       "[etf-flows] Starting ETF flows fetch (BTC, ETH, SOL in parallel)...",
     );
 
-    const [btcFlows, ethFlows, solFlows] = await Promise.all([
+    // Use allSettled for partial success - if 1-2 fail, we still show the rest
+    const results = await Promise.allSettled([
       fetchETFFlows(BTC_ETF_URL, "BTC"),
       fetchETFFlows(ETH_ETF_URL, "ETH"),
       fetchETFFlows(SOL_ETF_URL, "SOL"),
     ]);
 
-    const btcTotal = btcFlows.reduce((sum, f) => sum + f.flow, 0);
-    const ethTotal = ethFlows.reduce((sum, f) => sum + f.flow, 0);
-    const solTotal = solFlows.reduce((sum, f) => sum + f.flow, 0);
+    const [btcResult, ethResult, solResult] = results;
+
+    // Check if ALL failed - only then throw
+    const allFailed = results.every((r) => r.status === "rejected");
+    if (allFailed) {
+      const errors = results
+        .map((r) =>
+          r.status === "rejected"
+            ? r.reason instanceof Error
+              ? r.reason.message
+              : String(r.reason)
+            : "",
+        )
+        .filter(Boolean)
+        .join("; ");
+      throw new Error(`All ETF fetches failed: ${errors}`);
+    }
 
     const tradingDate = getPreviousTradingDay(date);
 
@@ -170,21 +219,9 @@ export const etfFlowsSource: DataSource = {
       title: `ETF Flows from ${formatTradingDate(tradingDate)}`,
       icon: "📊",
       items: [
-        {
-          text: `BTC ETFs: ${formatMillion(btcTotal)}`,
-          sentiment: getFlowSentiment(btcTotal),
-          url: BTC_ETF_URL,
-        },
-        {
-          text: `ETH ETFs: ${formatMillion(ethTotal)}`,
-          sentiment: getFlowSentiment(ethTotal),
-          url: ETH_ETF_URL,
-        },
-        {
-          text: `SOL ETFs: ${formatMillion(solTotal)}`,
-          sentiment: getFlowSentiment(solTotal),
-          url: SOL_ETF_URL,
-        },
+        buildETFItem("BTC", btcResult, BTC_ETF_URL),
+        buildETFItem("ETH", ethResult, ETH_ETF_URL),
+        buildETFItem("SOL", solResult, SOL_ETF_URL),
       ],
     };
   },

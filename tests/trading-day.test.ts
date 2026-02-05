@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  buildETFItem,
   formatMillion,
   formatTradingDate,
   getEasterDate,
@@ -373,5 +374,122 @@ describe("formatMillion", () => {
   it("rounds to one decimal place", () => {
     expect(formatMillion(145.26)).toBe("+$145.3M");
     expect(formatMillion(-23.14)).toBe("-$23.1M");
+  });
+});
+
+// ============================================================================
+// buildETFItem (partial success handling)
+// ============================================================================
+
+describe("buildETFItem", () => {
+  const testUrl = "https://farside.co.uk/btc/";
+
+  describe("when fetch succeeds", () => {
+    it("returns formatted flow with positive sentiment", () => {
+      const result = buildETFItem(
+        "BTC",
+        {
+          status: "fulfilled",
+          value: [
+            { ticker: "IBIT", name: "IBIT", flow: 100, date: new Date() },
+          ],
+        },
+        testUrl,
+      );
+      expect(result.text).toBe("BTC ETFs: +$100.0M");
+      expect(result.sentiment).toBe("positive");
+      expect(result.url).toBe(testUrl);
+    });
+
+    it("returns formatted flow with negative sentiment", () => {
+      const result = buildETFItem(
+        "ETH",
+        {
+          status: "fulfilled",
+          value: [
+            { ticker: "ETHA", name: "ETHA", flow: -50, date: new Date() },
+          ],
+        },
+        testUrl,
+      );
+      expect(result.text).toBe("ETH ETFs: -$50.0M");
+      expect(result.sentiment).toBe("negative");
+    });
+
+    it("sums multiple ETF flows", () => {
+      const result = buildETFItem(
+        "BTC",
+        {
+          status: "fulfilled",
+          value: [
+            { ticker: "IBIT", name: "IBIT", flow: 100, date: new Date() },
+            { ticker: "FBTC", name: "FBTC", flow: 50, date: new Date() },
+            { ticker: "GBTC", name: "GBTC", flow: -30, date: new Date() },
+          ],
+        },
+        testUrl,
+      );
+      expect(result.text).toBe("BTC ETFs: +$120.0M");
+      expect(result.sentiment).toBe("positive");
+    });
+
+    it("handles zero total with neutral sentiment", () => {
+      const result = buildETFItem(
+        "SOL",
+        {
+          status: "fulfilled",
+          value: [
+            { ticker: "BSOL", name: "BSOL", flow: 50, date: new Date() },
+            { ticker: "VSOL", name: "VSOL", flow: -50, date: new Date() },
+          ],
+        },
+        testUrl,
+      );
+      expect(result.text).toBe("SOL ETFs: $0");
+      expect(result.sentiment).toBe("neutral");
+    });
+
+    it("handles empty flows array", () => {
+      const result = buildETFItem(
+        "BTC",
+        { status: "fulfilled", value: [] },
+        testUrl,
+      );
+      expect(result.text).toBe("BTC ETFs: $0");
+      expect(result.sentiment).toBe("neutral");
+    });
+  });
+
+  describe("when fetch fails", () => {
+    it("returns unavailable with neutral sentiment for Error", () => {
+      const result = buildETFItem(
+        "BTC",
+        { status: "rejected", reason: new Error("Timeout after 30000ms") },
+        testUrl,
+      );
+      expect(result.text).toBe("BTC ETFs: unavailable");
+      expect(result.sentiment).toBe("neutral");
+      expect(result.url).toBe(testUrl);
+    });
+
+    it("returns unavailable for string error", () => {
+      const result = buildETFItem(
+        "ETH",
+        { status: "rejected", reason: "Network error" },
+        testUrl,
+      );
+      expect(result.text).toBe("ETH ETFs: unavailable");
+      expect(result.sentiment).toBe("neutral");
+    });
+
+    it("handles different ETF types", () => {
+      const solResult = buildETFItem(
+        "SOL",
+        { status: "rejected", reason: new Error("Connection refused") },
+        "https://farside.co.uk/sol/",
+      );
+      expect(solResult.text).toBe("SOL ETFs: unavailable");
+      expect(solResult.url).toBe("https://farside.co.uk/sol/");
+    });
   });
 });
