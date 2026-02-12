@@ -42,7 +42,11 @@ export const runBriefing = async (
 
   const results = await Promise.allSettled(
     sources.map((source) =>
-      fetchWithTimeout(source.fetch(date), timeoutMs, source.name),
+      fetchWithTimeout(
+        source.fetch(date),
+        source.timeoutMs ?? timeoutMs,
+        source.name,
+      ),
     ),
   );
 
@@ -66,9 +70,12 @@ export const runBriefing = async (
     }
   });
 
+  // Filter out sections with no items (e.g., conditional sources with nothing to report)
+  const nonEmptySections = sections.filter((s) => s.items.length > 0);
+
   // Sort sections by priority (lower = higher in briefing)
   // Use startsWith to match titles that include additional info (e.g., "ETF Flows from Fri, Jan 30")
-  const sortedSections = [...sections].sort((a, b) => {
+  const sortedSections = [...nonEmptySections].sort((a, b) => {
     const priorityA =
       sources.find((s) => a.title.startsWith(s.name))?.priority ?? 99;
     const priorityB =

@@ -14,6 +14,10 @@ import {
 } from "./economic-calendar";
 import { etfFlowsSource, mockETFFlowsSource } from "./etf-flows";
 import {
+  mockOpenSeaVoyagesSource,
+  openSeaVoyagesSource,
+} from "./opensea-voyages";
+import {
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
   polymarketMoversSource,
@@ -30,6 +34,7 @@ const getRealSources = (): DataSource[] => [
   economicCalendarSource,
   polymarketMoversSource,
   polymarketTopMarketsSource,
+  openSeaVoyagesSource,
 ];
 
 const getMockSources = (): DataSource[] => [
@@ -37,6 +42,7 @@ const getMockSources = (): DataSource[] => [
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
+  mockOpenSeaVoyagesSource,
 ];
 
 const ALL_SOURCES = (): DataSource[] => {

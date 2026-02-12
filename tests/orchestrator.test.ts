@@ -132,6 +132,43 @@ describe("runBriefing", () => {
     expect(briefing.sections[1]?.title).toBe("Medium Priority");
     expect(briefing.sections[2]?.title).toBe("Low Priority");
   });
+
+  it("should exclude sections with empty items array", async () => {
+    const sources = [
+      createSuccessSource("Has Items", 1, [{ text: "Real data" }]),
+      createSuccessSource("Empty Source", 2, []),
+    ];
+
+    const briefing = await runBriefing(sources, new Date());
+
+    expect(briefing.sections).toHaveLength(1);
+    expect(briefing.sections[0]?.title).toBe("Has Items");
+  });
+
+  it("should not count empty sections as failures", async () => {
+    const sources = [createSuccessSource("Empty Source", 1, [])];
+
+    const briefing = await runBriefing(sources, new Date());
+
+    expect(briefing.sections).toHaveLength(0);
+    expect(briefing.failures).toHaveLength(0);
+  });
+
+  it("should include non-empty sections when mixed with empty ones", async () => {
+    const sources = [
+      createSuccessSource("Empty A", 1, []),
+      createSuccessSource("Has Data", 2, [{ text: "Data" }]),
+      createSuccessSource("Empty B", 3, []),
+      createSuccessSource("Also Has Data", 4, [{ text: "More data" }]),
+    ];
+
+    const briefing = await runBriefing(sources, new Date());
+
+    expect(briefing.sections).toHaveLength(2);
+    expect(briefing.sections[0]?.title).toBe("Has Data");
+    expect(briefing.sections[1]?.title).toBe("Also Has Data");
+    expect(briefing.failures).toHaveLength(0);
+  });
 });
 
 // ============================================================================

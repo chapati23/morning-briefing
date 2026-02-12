@@ -72,6 +72,41 @@ describe("Full Briefing Pipeline", () => {
     });
   });
 
+  describe("conditional section inclusion", () => {
+    it("should exclude sources that return empty items from the briefing", async () => {
+      const sources: DataSource[] = [
+        createSuccessSource("ETF Flows", 1, [{ text: "SPY: +$500M" }]),
+        createSuccessSource("OpenSea Voyages", 2, []), // No voyages available
+        createSuccessSource("Polymarket", 3, [{ text: "Bitcoin $100k: 45%" }]),
+      ];
+
+      const briefing = await runFullBriefing(sources, []);
+
+      expect(briefing.sections).toHaveLength(2);
+      expect(briefing.sections[0]?.title).toBe("ETF Flows");
+      expect(briefing.sections[1]?.title).toBe("Polymarket");
+      // Empty source should not appear as a failure
+      expect(briefing.failures).toHaveLength(0);
+    });
+
+    it("should exclude empty sections from Telegram formatting", async () => {
+      const sources: DataSource[] = [
+        createSuccessSource("Economic Calendar", 1, [{ text: "FOMC Meeting" }]),
+        createSuccessSource("Empty Source", 2, []),
+      ];
+
+      const briefing = await runFullBriefing(
+        sources,
+        [],
+        new Date("2026-01-15"),
+      );
+      const formatted = formatBriefingForTelegram(briefing);
+
+      expect(formatted).toContain("Economic Calendar");
+      expect(formatted).not.toContain("Empty Source");
+    });
+  });
+
   describe("channel notification delivery", () => {
     it("should deliver briefing to all channels", async () => {
       const sources = [createSuccessSource("Test Source", 1)];
