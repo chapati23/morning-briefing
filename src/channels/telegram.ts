@@ -113,7 +113,10 @@ export const formatSection = (section: BriefingSection): string => {
     // Calendar items: put calendar icon + time as one clickable link at the start
     if (item.calendarUrl && item.time) {
       const timeStr = formatTime(item.time);
-      const calendarLink = `[${escapeMarkdown(timeStr)}](${escapeUrlForMarkdown(item.calendarUrl)})`;
+      const timeParts = item.timePrefix
+        ? `${item.timePrefix} ${timeStr}`
+        : timeStr;
+      const calendarLink = `[${escapeMarkdown(timeParts)}](${escapeUrlForMarkdown(item.calendarUrl)})`;
       const formattedText = formatTextWithMonospace(text);
       line = `${indent}${bullet} ${calendarLink} ${formattedText}`;
 

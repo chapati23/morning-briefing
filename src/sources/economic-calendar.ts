@@ -41,8 +41,12 @@ export const economicCalendarSource: DataSource = {
   priority: 4,
 
   fetch: async (date: Date): Promise<BriefingSection> => {
-    const events = await fetchHighImportanceEvents(date);
+    if (isWeekend(date)) {
+      return fetchWeekAhead(date);
+    }
 
+    const { start, end } = getDayRange(date);
+    const events = await fetchHighImportanceEvents(start, end);
     const items = events.map((event) => createBriefingItem(event));
 
     return {
@@ -57,13 +61,48 @@ export const economicCalendarSource: DataSource = {
 };
 
 // ============================================================================
-// Briefing Item Creation
+// Week-Ahead Fetch (weekend path)
 // ============================================================================
 
 /**
- * Create a BriefingItem with a Google Calendar link for one-tap event creation.
+ * Fetch the top market-moving events for the upcoming week.
+ * Used when the briefing runs on a weekend.
  */
-const createBriefingItem = (event: TradingViewEvent): BriefingItem => {
+const fetchWeekAhead = async (date: Date): Promise<BriefingSection> => {
+  const { start, end } = getNextWeekRange(date);
+  const events = await fetchHighImportanceEvents(start, end);
+  const topEvents = getTopEvents(events, WEEK_AHEAD_LIMIT);
+  const items = topEvents.map((event) =>
+    createBriefingItem(event, { includeWeekday: true }),
+  );
+
+  return {
+    title: "Economic Calendar (Week Ahead)",
+    icon: "📅",
+    items:
+      items.length > 0
+        ? items
+        : [{ text: "No high-impact economic releases next week" }],
+  };
+};
+
+// ============================================================================
+// Briefing Item Creation
+// ============================================================================
+
+interface BriefingItemOptions {
+  readonly includeWeekday?: boolean;
+}
+
+/**
+ * Create a BriefingItem with a Google Calendar link for one-tap event creation.
+ * When `includeWeekday` is true, sets `timePrefix` to a short day name (e.g. "Wed")
+ * so the formatter can render it inside the time link.
+ */
+const createBriefingItem = (
+  event: TradingViewEvent,
+  options: BriefingItemOptions = {},
+): BriefingItem => {
   const eventUrl = buildTradingViewUrl(event);
   const detail = formatEventDetail(event);
   const eventDate = new Date(event.date);
@@ -74,6 +113,7 @@ const createBriefingItem = (event: TradingViewEvent): BriefingItem => {
     detail,
     sentiment: "neutral" as const,
     time: eventDate,
+    timePrefix: options.includeWeekday ? formatWeekday(eventDate) : undefined,
     url: eventUrl,
     calendarUrl,
   };
@@ -115,10 +155,154 @@ const formatGoogleDate = (date: Date): string => {
 };
 
 // ============================================================================
+// Date Helpers
+// ============================================================================
+
+/**
+ * Returns true if the given date falls on a Saturday (6) or Sunday (0).
+ */
+export const isWeekend = (date: Date): boolean => {
+  const day = date.getDay();
+  return day === 0 || day === 6;
+};
+
+/**
+ * Returns the start (00:00:00.000) and end (23:59:59.999) of the given date.
+ */
+const getDayRange = (date: Date): { start: Date; end: Date } => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
+};
+
+/**
+ * Given a weekend date, returns the date range for the next Monday through Friday.
+ * Saturday → next Mon-Fri. Sunday → next Mon-Fri (same week).
+ */
+export const getNextWeekRange = (date: Date): { start: Date; end: Date } => {
+  const day = date.getDay(); // 0 = Sun, 6 = Sat
+  const daysUntilMonday = day === 6 ? 2 : 1; // Sat → +2, Sun → +1
+
+  const monday = new Date(date);
+  monday.setDate(monday.getDate() + daysUntilMonday);
+  monday.setHours(0, 0, 0, 0);
+
+  const friday = new Date(monday);
+  friday.setDate(friday.getDate() + 4);
+  friday.setHours(23, 59, 59, 999);
+
+  return { start: monday, end: friday };
+};
+
+// ============================================================================
+// Event Ranking (for week-ahead view)
+// ============================================================================
+
+/** Maximum number of events to show in the week-ahead view. */
+const WEEK_AHEAD_LIMIT = 5;
+
+/**
+ * Keyword-to-score map for known market-moving indicators.
+ * Matched case-insensitively against event titles.
+ *
+ * Score 10: Central bank decisions and top-tier US employment/inflation data
+ * Score 8:  GDP, core inflation proxies, major employment/retail figures
+ * Score 6:  PMIs, sentiment surveys, housing, trade data
+ * Score 4:  Default for any high-importance event not matching keywords
+ */
+const MARKET_IMPACT_INDICATORS: ReadonlyMap<string, number> = new Map([
+  // Tier 1 — Score 10
+  ["nonfarm payrolls", 10],
+  ["consumer price index", 10],
+  [" cpi", 10], // leading space avoids false matches like "recipe"
+  ["interest rate decision", 10],
+  ["fed funds rate", 10],
+  ["fomc", 10],
+  ["ecb interest rate", 10],
+  ["boe interest rate", 10],
+  ["boj interest rate", 10],
+
+  // Tier 2 — Score 8
+  ["gdp", 8],
+  ["pce price index", 8],
+  ["core pce", 8],
+  ["ppi", 8],
+  ["retail sales", 8],
+  ["unemployment rate", 8],
+  ["initial jobless claims", 8],
+
+  // Tier 3 — Score 6
+  ["pmi", 6],
+  ["ism manufacturing", 6],
+  ["ism services", 6],
+  ["consumer confidence", 6],
+  ["trade balance", 6],
+  ["housing starts", 6],
+  ["building permits", 6],
+  ["durable goods", 6],
+  ["industrial production", 6],
+]);
+
+/**
+ * Country weighting — US data moves global markets the most.
+ */
+const COUNTRY_WEIGHT: ReadonlyMap<string, number> = new Map([
+  ["US", 1.5],
+  ["EU", 1.2],
+  ["GB", 1.2],
+  ["DE", 1.1],
+  ["JP", 1],
+  ["CN", 1],
+]);
+
+const DEFAULT_INDICATOR_SCORE = 4;
+const DEFAULT_COUNTRY_WEIGHT = 1;
+
+/**
+ * Compute a market-impact score for a single event.
+ * Higher score = more likely to move markets.
+ */
+export const scoreEvent = (event: TradingViewEvent): number => {
+  const titleLower = event.title.toLowerCase();
+
+  let indicatorScore = DEFAULT_INDICATOR_SCORE;
+  for (const [keyword, score] of MARKET_IMPACT_INDICATORS) {
+    if (titleLower.includes(keyword)) {
+      indicatorScore = Math.max(indicatorScore, score);
+    }
+  }
+
+  const countryWeight =
+    COUNTRY_WEIGHT.get(event.country) ?? DEFAULT_COUNTRY_WEIGHT;
+
+  return indicatorScore * countryWeight;
+};
+
+/**
+ * Score, rank, and return the top N events.
+ * Tiebreaker: chronological order (earlier first).
+ */
+export const getTopEvents = (
+  events: readonly TradingViewEvent[],
+  limit: number,
+): readonly TradingViewEvent[] =>
+  [...events]
+    .sort((a, b) => {
+      const scoreDiff = scoreEvent(b) - scoreEvent(a);
+      if (scoreDiff !== 0) return scoreDiff;
+      return a.date.localeCompare(b.date);
+    })
+    .slice(0, limit);
+
+// ============================================================================
 // API Client
 // ============================================================================
 
-interface TradingViewEvent {
+export interface TradingViewEvent {
   readonly id: string;
   readonly title: string;
   readonly country: string;
@@ -145,17 +329,12 @@ interface TradingViewResponse {
 }
 
 const fetchHighImportanceEvents = async (
-  date: Date,
+  from: Date,
+  to: Date,
 ): Promise<readonly TradingViewEvent[]> => {
-  const startOfDay = new Date(date);
-  startOfDay.setHours(0, 0, 0, 0);
-
-  const endOfDay = new Date(date);
-  endOfDay.setHours(23, 59, 59, 999);
-
   const url = new URL(TRADINGVIEW_API_URL);
-  url.searchParams.set("from", startOfDay.toISOString());
-  url.searchParams.set("to", endOfDay.toISOString());
+  url.searchParams.set("from", from.toISOString());
+  url.searchParams.set("to", to.toISOString());
   url.searchParams.set("countries", TRACKED_COUNTRIES.join(","));
 
   const response = await fetch(url.toString(), {
@@ -192,6 +371,22 @@ const fetchHighImportanceEvents = async (
 // ============================================================================
 // Formatters
 // ============================================================================
+
+const WEEKDAY_NAMES = [
+  "Sun",
+  "Mon",
+  "Tue",
+  "Wed",
+  "Thu",
+  "Fri",
+  "Sat",
+] as const;
+
+/**
+ * Format a short weekday name for the week-ahead view (e.g. "Mon", "Tue").
+ */
+const formatWeekday = (date: Date): string =>
+  WEEKDAY_NAMES[date.getDay()] ?? "???";
 
 const formatEventText = (event: TradingViewEvent): string => {
   const flag = COUNTRY_FLAGS.get(event.country) ?? "🌍";

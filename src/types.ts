@@ -24,6 +24,7 @@ export interface BriefingItem {
   readonly text: string;
   readonly detail?: string;
   readonly time?: Date;
+  readonly timePrefix?: string; // Short label shown before the time (e.g. "Wed")
   readonly url?: string;
   readonly calendarUrl?: string; // GCS URL for calendar ICS download
   readonly sentiment?: Sentiment;
