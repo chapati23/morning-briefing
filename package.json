@@ -23,6 +23,7 @@
     "healthcheck": "curl -s \"$(cd terraform && terraform output -raw service_url)/health\" -H \"Authorization: Bearer $(gcloud auth print-identity-token)\" | jq ."
   },
   "dependencies": {
+    "@google-cloud/storage": "^7.19.0",
     "agentmail": "^0.2.13",
     "cheerio": "^1.0.0",
     "exponential-backoff": "^3.1.3",

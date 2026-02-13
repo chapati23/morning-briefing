@@ -61,6 +61,12 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
         value = "false"
       }
 
+      # Data bucket for persistent storage (rankings history, etc.)
+      env {
+        name  = "GCS_DATA_BUCKET"
+        value = google_storage_bucket.data.name
+      }
+
       # Puppeteer configuration - point to Chrome cache from base image
       env {
         name  = "PUPPETEER_CACHE_DIR"

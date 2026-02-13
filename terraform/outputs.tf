@@ -23,6 +23,11 @@ output "scheduler_job_name" {
   value       = google_cloud_scheduler_job.morning_briefing.name
 }
 
+output "data_bucket" {
+  description = "GCS bucket for persistent briefing data"
+  value       = google_storage_bucket.data.name
+}
+
 output "project_id" {
   description = "GCP Project ID"
   value       = var.project_id

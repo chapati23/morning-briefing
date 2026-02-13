@@ -50,6 +50,13 @@ resource "google_project_iam_member" "github_actions_run_admin" {
   member  = "serviceAccount:${google_service_account.github_actions.email}"
 }
 
+# Allow Cloud Run SA to read/write the data bucket (rankings history, etc.)
+resource "google_storage_bucket_iam_member" "cloudrun_data_bucket" {
+  bucket = google_storage_bucket.data.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.cloudrun.email}"
+}
+
 # Grant GitHub Actions SA permission to act as the Cloud Run service account
 resource "google_service_account_iam_member" "github_actions_act_as_cloudrun" {
   service_account_id = google_service_account.cloudrun.name

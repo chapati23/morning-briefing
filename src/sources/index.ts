@@ -18,6 +18,10 @@ import {
   openSeaVoyagesSource,
 } from "./opensea-voyages";
 import {
+  appStoreRankingsSource,
+  mockAppStoreRankingsSource,
+} from "./appstore-rankings";
+import {
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
   polymarketMoversSource,
@@ -34,6 +38,7 @@ const getRealSources = (): DataSource[] => [
   economicCalendarSource,
   polymarketMoversSource,
   polymarketTopMarketsSource,
+  appStoreRankingsSource,
   openSeaVoyagesSource,
 ];
 
@@ -42,6 +47,7 @@ const getMockSources = (): DataSource[] => [
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
+  mockAppStoreRankingsSource,
   mockOpenSeaVoyagesSource,
 ];
 
