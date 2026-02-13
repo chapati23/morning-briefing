@@ -235,8 +235,8 @@ const log = (type: "BTC" | "ETH" | "SOL", message: string): void => {
   console.log(`[etf-flows:${type}] ${message}`);
 };
 
-// Cache TTL: 2 hours (data only changes once per trading day)
-const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+// Cache TTL: 6 hours (data only changes once per trading day)
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Fetch ETF flows with caching (for development) and retry (for reliability).
