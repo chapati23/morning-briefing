@@ -105,13 +105,63 @@ const fetchOverallRankings = async (): Promise<ReadonlyMap<string, number>> => {
   );
 
   const response = await fetch(APPLE_RSS_URL);
+  // #region agent log
+  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "appstore-rankings.ts:fetchOverallRankings",
+      message: "Apple RSS API response",
+      data: {
+        status: response.status,
+        statusText: response.statusText,
+        url: APPLE_RSS_URL,
+        headers: Object.fromEntries(response.headers.entries()),
+        contentType: response.headers.get("content-type"),
+      },
+      timestamp: Date.now(),
+      hypothesisId: "H1-H2-H3",
+    }),
+  }).catch(() => {});
+  // #endregion
   if (!response.ok) {
+    // #region agent log
+    const errorBody = await response.text().catch(() => "(unreadable)");
+    fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        location: "appstore-rankings.ts:fetchOverallRankings:error",
+        message: "Apple RSS API error body",
+        data: {
+          status: response.status,
+          errorBody: errorBody.slice(0, 2000),
+          url: APPLE_RSS_URL,
+        },
+        timestamp: Date.now(),
+        hypothesisId: "H5",
+      }),
+    }).catch(() => {});
+    // #endregion
     throw new Error(
       `Apple RSS API returned ${response.status}: ${response.statusText}`,
     );
   }
 
   const data = (await response.json()) as AppleRSSResponse;
+  // #region agent log
+  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "appstore-rankings.ts:fetchOverallRankings:success",
+      message: "Apple RSS API parsed",
+      data: { resultCount: data.feed.results.length },
+      timestamp: Date.now(),
+      hypothesisId: "H1",
+    }),
+  }).catch(() => {});
+  // #endregion
   const rankings = new Map<string, number>();
 
   for (const [index, app] of data.feed.results.entries()) {
@@ -128,6 +178,19 @@ const fetchFinanceRankings = async (): Promise<ReadonlyMap<string, number>> => {
 
   const url = buildITunesRSSUrl(FINANCE_GENRE_ID, 200);
   const response = await fetch(url);
+  // #region agent log
+  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      location: "appstore-rankings.ts:fetchFinanceRankings",
+      message: "iTunes RSS response",
+      data: { status: response.status, statusText: response.statusText, url },
+      timestamp: Date.now(),
+      hypothesisId: "H4-comparison",
+    }),
+  }).catch(() => {});
+  // #endregion
   if (!response.ok) {
     throw new Error(
       `iTunes RSS feed returned ${response.status}: ${response.statusText}`,
