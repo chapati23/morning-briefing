@@ -3,7 +3,7 @@
  *
  * Tracks iOS App Store positions (overall + Finance category) for crypto apps.
  * Uses two free Apple APIs (no dependencies, no API keys):
- *   1. Apple Marketing Tools RSS API → overall US top 200
+ *   1. Apple Marketing Tools RSS API → overall US top 100
  *   2. iTunes RSS feed (legacy Apple endpoint, still active as of 2026) → Finance category top 200
  *
  * Historical data is persisted in GCS (production) or local cache (dev)
@@ -85,7 +85,7 @@ interface ITunesRSSEntry {
 // ============================================================================
 
 const APPLE_RSS_URL =
-  "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/200/apps.json";
+  "https://rss.applemarketingtools.com/api/v2/us/apps/top-free/100/apps.json";
 
 /** Genre ID for Finance category in the App Store */
 const FINANCE_GENRE_ID = 6015;
@@ -98,70 +98,20 @@ const FINANCE_GENRE_ID = 6015;
 const buildITunesRSSUrl = (genre: number, limit: number): string =>
   `https://itunes.apple.com/us/rss/topfreeapplications/genre=${genre}/limit=${limit}/json`;
 
-/** Fetch overall US App Store top 200 from Apple's RSS API. Returns Map<itunesId, rank>. */
+/** Fetch overall US App Store top 100 from Apple's RSS API. Returns Map<itunesId, rank>. */
 const fetchOverallRankings = async (): Promise<ReadonlyMap<string, number>> => {
   console.log(
     "[appstore-rankings] Fetching overall rankings from Apple RSS API...",
   );
 
   const response = await fetch(APPLE_RSS_URL);
-  // #region agent log
-  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "appstore-rankings.ts:fetchOverallRankings",
-      message: "Apple RSS API response",
-      data: {
-        status: response.status,
-        statusText: response.statusText,
-        url: APPLE_RSS_URL,
-        headers: Object.fromEntries(response.headers.entries()),
-        contentType: response.headers.get("content-type"),
-      },
-      timestamp: Date.now(),
-      hypothesisId: "H1-H2-H3",
-    }),
-  }).catch(() => {});
-  // #endregion
   if (!response.ok) {
-    // #region agent log
-    const errorBody = await response.text().catch(() => "(unreadable)");
-    fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        location: "appstore-rankings.ts:fetchOverallRankings:error",
-        message: "Apple RSS API error body",
-        data: {
-          status: response.status,
-          errorBody: errorBody.slice(0, 2000),
-          url: APPLE_RSS_URL,
-        },
-        timestamp: Date.now(),
-        hypothesisId: "H5",
-      }),
-    }).catch(() => {});
-    // #endregion
     throw new Error(
       `Apple RSS API returned ${response.status}: ${response.statusText}`,
     );
   }
 
   const data = (await response.json()) as AppleRSSResponse;
-  // #region agent log
-  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "appstore-rankings.ts:fetchOverallRankings:success",
-      message: "Apple RSS API parsed",
-      data: { resultCount: data.feed.results.length },
-      timestamp: Date.now(),
-      hypothesisId: "H1",
-    }),
-  }).catch(() => {});
-  // #endregion
   const rankings = new Map<string, number>();
 
   for (const [index, app] of data.feed.results.entries()) {
@@ -178,19 +128,6 @@ const fetchFinanceRankings = async (): Promise<ReadonlyMap<string, number>> => {
 
   const url = buildITunesRSSUrl(FINANCE_GENRE_ID, 200);
   const response = await fetch(url);
-  // #region agent log
-  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      location: "appstore-rankings.ts:fetchFinanceRankings",
-      message: "iTunes RSS response",
-      data: { status: response.status, statusText: response.statusText, url },
-      timestamp: Date.now(),
-      hypothesisId: "H4-comparison",
-    }),
-  }).catch(() => {});
-  // #endregion
   if (!response.ok) {
     throw new Error(
       `iTunes RSS feed returned ${response.status}: ${response.statusText}`,
