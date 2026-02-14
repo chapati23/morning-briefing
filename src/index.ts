@@ -72,3 +72,15 @@ console.log(`[server] Timezone: ${cfg.timezone}`);
 console.log(`[server] Endpoints:`);
 console.log(`  GET  /health         - Health check`);
 console.log(`  POST /briefing       - Trigger briefing`);
+
+// Warn about optional but expected configuration in production
+if (
+  process.env["NODE_ENV"] === "production" &&
+  !process.env["GCS_DATA_BUCKET"]
+) {
+  console.warn(
+    "[server] ⚠ GCS_DATA_BUCKET is not set. " +
+      "App Store Rankings will work but without historical trend data. " +
+      "Run `cd terraform && make plan && make apply` to provision the bucket.",
+  );
+}

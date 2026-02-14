@@ -45,15 +45,8 @@ const RETENTION_DAYS = 90;
 
 const isProduction = (): boolean => process.env["NODE_ENV"] === "production";
 
-const getBucketName = (): string => {
-  const bucket = process.env["GCS_DATA_BUCKET"];
-  if (!bucket) {
-    throw new Error(
-      "GCS_DATA_BUCKET env var is required in production. " +
-        "Set it in .env.local for local testing or deploy via Terraform.",
-    );
-  }
-  return bucket;
+const getBucketName = (): string | undefined => {
+  return process.env["GCS_DATA_BUCKET"];
 };
 
 // ============================================================================
@@ -68,10 +61,18 @@ const getStorage = (): Storage => {
 };
 
 const loadFromGCS = async (): Promise<RankingsHistory> => {
-  const bucket = getStorage().bucket(getBucketName());
-  const file = bucket.file(GCS_OBJECT_KEY);
-
   try {
+    const bucketName = getBucketName();
+    if (!bucketName) {
+      console.warn(
+        "[rankings-storage] GCS_DATA_BUCKET not configured, skipping history load",
+      );
+      return {};
+    }
+
+    const bucket = getStorage().bucket(bucketName);
+    const file = bucket.file(GCS_OBJECT_KEY);
+
     const [exists] = await file.exists();
     if (!exists) {
       console.log(
@@ -93,7 +94,15 @@ const loadFromGCS = async (): Promise<RankingsHistory> => {
 };
 
 const saveToGCS = async (history: RankingsHistory): Promise<void> => {
-  const bucket = getStorage().bucket(getBucketName());
+  const bucketName = getBucketName();
+  if (!bucketName) {
+    console.warn(
+      "[rankings-storage] GCS_DATA_BUCKET not configured, skipping history save",
+    );
+    return;
+  }
+
+  const bucket = getStorage().bucket(bucketName);
   const file = bucket.file(GCS_OBJECT_KEY);
 
   await file.save(JSON.stringify(history, null, 2), {
