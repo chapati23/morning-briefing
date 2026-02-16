@@ -40,6 +40,21 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
         }
       }
 
+      env {
+        name = "AGENTMAIL_API_KEY"
+        value_source {
+          secret_key_ref {
+            secret  = google_secret_manager_secret.agentmail_api_key.secret_id
+            version = "latest"
+          }
+        }
+      }
+
+      env {
+        name  = "AGENTMAIL_EMAIL_ADDRESS"
+        value = var.agentmail_email_address
+      }
+
       # Regular environment variables
       env {
         name  = "NODE_ENV"
@@ -117,6 +132,7 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
     google_artifact_registry_repository.morning_briefing,
     google_secret_manager_secret_version.telegram_bot_token,
     google_secret_manager_secret_version.telegram_chat_id,
+    google_secret_manager_secret_version.agentmail_api_key,
   ]
 
   lifecycle {

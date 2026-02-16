@@ -33,7 +33,7 @@ const log = (msg: string) => {
 // AgentMail Email Management
 // ============================================================================
 
-const ENV_KEY_INBOX = "OPENSEA_AGENTMAIL_INBOX";
+const ENV_KEY_INBOX = "AGENTMAIL_EMAIL_ADDRESS";
 
 const getOrCreateInbox = async (client: AgentMailClient): Promise<string> => {
   // Reuse saved inbox address
@@ -263,8 +263,7 @@ export const parseVoyages = (pageText: string): readonly Voyage[] => {
 const fetchVoyages = async (): Promise<readonly Voyage[]> => {
   const apiKey = process.env["AGENTMAIL_API_KEY"]?.trim();
   if (!apiKey) {
-    log("AGENTMAIL_API_KEY not set, skipping");
-    return [];
+    throw new Error("AGENTMAIL_API_KEY not configured");
   }
 
   const mail = new AgentMailClient({ apiKey });
@@ -460,8 +459,7 @@ export const openSeaVoyagesSource: DataSource = {
 
   fetch: async (): Promise<BriefingSection> => {
     if (!process.env["AGENTMAIL_API_KEY"]?.trim()) {
-      log("AGENTMAIL_API_KEY not configured, skipping");
-      return { title: "OpenSea Voyages", icon: "⛵", items: [] };
+      throw new Error("AGENTMAIL_API_KEY not configured");
     }
 
     const voyages = await withCache("opensea-voyages", fetchVoyages, {

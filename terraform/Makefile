@@ -13,7 +13,9 @@ define TF_VARS
 	set -a && . $(ENV_FILE) && set +a && \
 	TF_VAR_telegram_bot_token="$$TELEGRAM_BOT_TOKEN" \
 	TF_VAR_telegram_chat_id="$$TELEGRAM_CHAT_ID" \
-	TF_VAR_timezone="$$TIMEZONE"
+	TF_VAR_timezone="$$TIMEZONE" \
+	TF_VAR_agentmail_api_key="$$AGENTMAIL_API_KEY" \
+	TF_VAR_agentmail_email_address="$$AGENTMAIL_EMAIL_ADDRESS"
 endef
 
 .PHONY: help init plan apply destroy output fmt validate build push deploy setup-github-secrets
@@ -85,11 +87,7 @@ apply: ## Apply infrastructure changes (with approval prompt)
 	@$(TF_VARS) terraform apply
 
 destroy: ## Destroy all infrastructure (with approval prompt)
-	@set -a && . $(ENV_FILE) && set +a && \
-		TF_VAR_telegram_bot_token="$$TELEGRAM_BOT_TOKEN" \
-		TF_VAR_telegram_chat_id="$$TELEGRAM_CHAT_ID" \
-		TF_VAR_timezone="$$TIMEZONE" \
-		terraform destroy
+	@$(TF_VARS) terraform destroy
 
 output: ## Show Terraform outputs
 	terraform output

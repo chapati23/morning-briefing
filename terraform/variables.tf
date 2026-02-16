@@ -39,6 +39,17 @@ variable "schedule_cron" {
 }
 
 
+variable "agentmail_api_key" {
+  description = "AgentMail API key for OpenSea Voyages email-based OTP login (from https://console.agentmail.to)"
+  type        = string
+  sensitive   = true
+}
+
+variable "agentmail_email_address" {
+  description = "AgentMail inbox address for OpenSea OTP emails"
+  type        = string
+}
+
 variable "artifact_registry_kms_key_id" {
   description = "Optional KMS key ID for Artifact Registry CMEK encryption. Format: projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{key}"
   type        = string
