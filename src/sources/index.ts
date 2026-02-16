@@ -8,6 +8,7 @@ import { config } from "../config";
 import type { DataSource } from "../types";
 
 // Import sources
+import { dailyDegenNewsSource, mockDailyDegenNewsSource } from "./daily-degen";
 import {
   economicCalendarSource,
   mockEconomicCalendarSource,
@@ -34,6 +35,7 @@ import {
 
 // All available sources - add new ones here
 const getRealSources = (): DataSource[] => [
+  dailyDegenNewsSource,
   etfFlowsSource,
   economicCalendarSource,
   polymarketMoversSource,
@@ -43,6 +45,7 @@ const getRealSources = (): DataSource[] => [
 ];
 
 const getMockSources = (): DataSource[] => [
+  mockDailyDegenNewsSource,
   mockETFFlowsSource,
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
