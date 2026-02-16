@@ -16,34 +16,25 @@ import type {
   DataSource,
   Sentiment,
 } from "../types";
+import type { DailyAppRanking, DailySnapshot, RankingsHistory } from "../utils";
 import {
   formatDateKey,
   loadRankingsHistory,
   saveRankingsHistory,
 } from "../utils";
-import type { DailyAppRanking, DailySnapshot, RankingsHistory } from "../utils";
+import { fetchCurrentRankings } from "./fetch-current-rankings";
+import { TRACKED_APPS } from "./tracked-apps";
 
 // ============================================================================
 // Tracked Apps Configuration
 // ============================================================================
 
-interface TrackedApp {
+export interface TrackedApp {
   readonly name: string;
   readonly bundleId: string;
   /** iTunes track ID for matching against Apple RSS API results */
   readonly itunesId: string;
 }
-
-const TRACKED_APPS: readonly TrackedApp[] = [
-  { name: "Coinbase", bundleId: "com.vilcsak.bitcoin2", itunesId: "886427730" },
-  {
-    name: "Polymarket",
-    bundleId: "com.polymarket.ios-app",
-    itunesId: "6450037961",
-  },
-  { name: "Kraken", bundleId: "com.kraken.invest.app", itunesId: "1481947260" },
-  { name: "Crypto.com", bundleId: "co.mona.Monaco", itunesId: "1262148500" },
-];
 
 // ============================================================================
 // Apple API Types
@@ -99,7 +90,9 @@ const buildITunesRSSUrl = (genre: number, limit: number): string =>
   `https://itunes.apple.com/us/rss/topfreeapplications/genre=${genre}/limit=${limit}/json`;
 
 /** Fetch overall US App Store top 100 from Apple's RSS API. Returns Map<itunesId, rank>. */
-const fetchOverallRankings = async (): Promise<ReadonlyMap<string, number>> => {
+export const fetchOverallRankings = async (): Promise<
+  ReadonlyMap<string, number>
+> => {
   console.log(
     "[appstore-rankings] Fetching overall rankings from Apple RSS API...",
   );
@@ -123,7 +116,9 @@ const fetchOverallRankings = async (): Promise<ReadonlyMap<string, number>> => {
 };
 
 /** Fetch Finance category top 200 from iTunes RSS feed. Returns Map<bundleId, rank>. */
-const fetchFinanceRankings = async (): Promise<ReadonlyMap<string, number>> => {
+export const fetchFinanceRankings = async (): Promise<
+  ReadonlyMap<string, number>
+> => {
   console.log("[appstore-rankings] Fetching Finance category rankings...");
 
   const url = buildITunesRSSUrl(FINANCE_GENRE_ID, 200);
@@ -144,51 +139,6 @@ const fetchFinanceRankings = async (): Promise<ReadonlyMap<string, number>> => {
 
   console.log(`[appstore-rankings] Got ${rankings.size} Finance rankings`);
   return rankings;
-};
-
-/** Fetch current rankings for all tracked apps from both sources in parallel. */
-const fetchCurrentRankings = async (): Promise<DailySnapshot> => {
-  const [overallResult, financeResult] = await Promise.allSettled([
-    fetchOverallRankings(),
-    fetchFinanceRankings(),
-  ]);
-
-  const overallMap =
-    overallResult.status === "fulfilled" ? overallResult.value : null;
-  const financeMap =
-    financeResult.status === "fulfilled" ? financeResult.value : null;
-
-  if (overallResult.status === "rejected") {
-    console.warn(
-      "[appstore-rankings] Overall rankings fetch failed:",
-      overallResult.reason instanceof Error
-        ? overallResult.reason.message
-        : overallResult.reason,
-    );
-  }
-  if (financeResult.status === "rejected") {
-    console.warn(
-      "[appstore-rankings] Finance rankings fetch failed:",
-      financeResult.reason instanceof Error
-        ? financeResult.reason.message
-        : financeResult.reason,
-    );
-  }
-
-  // If both failed, throw
-  if (!overallMap && !financeMap) {
-    throw new Error("Both ranking sources failed");
-  }
-
-  const snapshot: Record<string, DailyAppRanking> = {};
-  for (const app of TRACKED_APPS) {
-    snapshot[app.bundleId] = {
-      overall: overallMap?.get(app.itunesId) ?? null,
-      finance: financeMap?.get(app.bundleId) ?? null,
-    };
-  }
-
-  return snapshot;
 };
 
 // ============================================================================
@@ -361,13 +311,20 @@ export const formatPositionText = (
   return parts.join(": ");
 };
 
-/** Build BriefingItems from current rankings + historical trends. */
+/** Build BriefingItems from current rankings + historical trends, sorted by best position. */
 const buildBriefingItems = (
   snapshot: DailySnapshot,
   history: RankingsHistory,
   referenceDate: Date,
-): readonly BriefingItem[] =>
-  TRACKED_APPS.map((app) => {
+): readonly BriefingItem[] => {
+  // Create items with app reference for sorting
+  interface ItemWithRanking {
+    readonly app: TrackedApp;
+    readonly ranking: DailyAppRanking;
+    readonly item: BriefingItem;
+  }
+
+  const itemsWithApps: ItemWithRanking[] = TRACKED_APPS.map((app) => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
     const trends = computeAppTrends(
       history,
@@ -377,11 +334,27 @@ const buildBriefingItems = (
     );
 
     return {
-      text: formatPositionText(app, ranking),
-      detail: formatTrendLine(trends),
-      sentiment: getSentiment(trends),
+      app,
+      ranking,
+      item: {
+        text: formatPositionText(app, ranking),
+        detail: formatTrendLine(trends),
+        sentiment: getSentiment(trends),
+      },
     };
   });
+
+  // Sort by best (lowest) position first: Overall preferred, then finance category, unranked last
+  return itemsWithApps
+    .sort((a: ItemWithRanking, b: ItemWithRanking) => {
+      const aRank =
+        a.ranking.overall ?? a.ranking.finance ?? Number.MAX_SAFE_INTEGER;
+      const bRank =
+        b.ranking.overall ?? b.ranking.finance ?? Number.MAX_SAFE_INTEGER;
+      return aRank - bRank;
+    })
+    .map(({ item }: ItemWithRanking) => item);
+};
 
 // ============================================================================
 // Data Source
