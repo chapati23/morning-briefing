@@ -404,10 +404,8 @@ describe("formatBriefingForTelegram", () => {
   it("includes header with date", () => {
     const briefing = createTestBriefing();
     const result = formatBriefingForTelegram(briefing);
-    expect(result).toContain("🌅 *Morning Briefing*");
-    expect(result).toContain("January");
-    expect(result).toContain("15");
-    expect(result).toContain("2026");
+    expect(result).toMatch(/^\*.*January.*15.*2026.*\*/);
+    expect(result).not.toContain("Morning Briefing");
   });
 
   it("includes section separator before each section", () => {

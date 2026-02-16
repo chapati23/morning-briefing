@@ -160,9 +160,9 @@ describe("Telegram Formatting Integration", () => {
 
       const formatted = formatBriefingForTelegram(briefing);
 
-      // Verify header is present
-      expect(formatted).toContain("Morning Briefing");
-      expect(formatted).toContain("15, 2026");
+      // Verify header has date as bold title
+      expect(formatted).toMatch(/^\*.*15, 2026.*\*/);
+      expect(formatted).not.toContain("Morning Briefing");
 
       // Verify section titles are present (escaped)
       expect(formatted).toContain("ETF Flows");
@@ -297,7 +297,7 @@ describe("Realistic Briefing Scenarios", () => {
 
     // Verify formatting works
     const formatted = formatBriefingForTelegram(briefing);
-    expect(formatted).toContain("Morning Briefing");
+    expect(formatted).toMatch(/^\*.+\*/);
     expect(formatted).toContain("Economic Calendar");
     expect(formatted).toContain("ETF Flows");
     expect(formatted).toContain("Polymarket");

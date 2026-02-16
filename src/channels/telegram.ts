@@ -53,7 +53,7 @@ export const formatBriefingForTelegram = (briefing: Briefing): string => {
     day: "numeric",
     year: "numeric",
   });
-  lines.push(`🌅 *Morning Briefing*`, `_${escapeMarkdown(dateStr)}_`);
+  lines.push(`*${escapeMarkdown(dateStr)}*`);
 
   // Sections with separators before each one
   for (const section of briefing.sections) {
