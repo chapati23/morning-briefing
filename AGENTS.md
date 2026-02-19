@@ -209,6 +209,70 @@ This is the most common change. Follow this pattern exactly:
 - **Deploy:** Auto-deploy to Cloud Run on push to main (builds Docker image, pushes to Artifact Registry)
 - **Workload Identity Federation** for GCP auth (no service account keys in CI)
 
+## Troubleshooting
+
+### "gcloud: command not found"
+
+The gcloud CLI isn't installed. If you're on a clawd-provisioned server, it should be pre-installed via cloud-init. Otherwise:
+
+```bash
+# Debian/Ubuntu — install from Google's apt repo
+curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/cloud.google.gpg
+echo "deb [signed-by=/etc/apt/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list
+sudo apt-get update && sudo apt-get install -y google-cloud-cli
+```
+
+### "Permission denied" on `gcloud run services logs read`
+
+You need a GCP service account with read-only access. Run the bootstrap script from the `clawd` repo:
+
+```bash
+# From a machine with GCP admin access:
+./scripts/gcp-setup.sh <gcp-project-id> <bot-name>
+```
+
+This creates a `<bot-name>-readonly` service account with `roles/run.viewer` + `roles/logging.viewer`, stores the key in `pass`, and activates it. The key lives at `pass bot-<bot-name>/gcp/<project-id>/sa-key`.
+
+If the key is in pass but not activated (e.g. after server rebuild):
+
+```bash
+# Re-activate from pass
+TMPKEY=$(mktemp) && pass show bot-<bot-name>/gcp/<project-id>/sa-key > "$TMPKEY" \
+  && gcloud auth activate-service-account --key-file="$TMPKEY" --project=<project-id> \
+  && rm "$TMPKEY"
+```
+
+### "bun: command not found"
+
+This project uses Bun, not Node. Install:
+
+```bash
+curl -fsSL https://bun.sh/install | bash
+```
+
+### Tests fail with "Cannot find module" after git pull
+
+```bash
+bun install  # Reinstall deps after lockfile changes
+```
+
+### Terraform errors / missing variables
+
+Never run `terraform` directly — always use the Makefile from `terraform/`:
+
+```bash
+cd terraform && make plan  # Loads secrets from ../.env.local automatically
+```
+
+### Cloud Run logs show "Container failed to start"
+
+Check memory limits (Puppeteer needs 2Gi) and environment variables:
+
+```bash
+bun run logs          # Tail Cloud Run logs
+bun run healthcheck   # Hit /health endpoint
+```
+
 ## Boundaries
 
 - ✅ **Do:** Add sources, fix formatting, improve tests, update Terraform
