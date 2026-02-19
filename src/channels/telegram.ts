@@ -145,14 +145,20 @@ export const formatSection = (section: BriefingSection): string => {
         // Sentiment is already included in the link, don't add it again
       } else {
         // Regular items: link the whole text
-        const formattedText = item.url
-          ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
-          : formatTextWithMonospace(text);
+        if (item.monospace) {
+          const monoText = `\`${escapeMarkdownInCode(text)}\``;
+          const prefix = sentiment ? `${sentiment} ` : "";
+          line = `${indent}${bullet} ${prefix}${monoText}`;
+        } else {
+          const formattedText = item.url
+            ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
+            : formatTextWithMonospace(text);
 
-        line = `${indent}${bullet} ${timePrefix}${formattedText}`;
+          line = `${indent}${bullet} ${timePrefix}${formattedText}`;
 
-        if (sentiment) {
-          line += ` ${sentiment}`;
+          if (sentiment) {
+            line += ` ${sentiment}`;
+          }
         }
       }
     }

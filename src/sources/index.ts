@@ -15,6 +15,10 @@ import {
 } from "./economic-calendar";
 import { etfFlowsSource, mockETFFlowsSource } from "./etf-flows";
 import {
+  mockOvernightFuturesSource,
+  overnightFuturesSource,
+} from "./overnight-futures";
+import {
   mockOpenSeaVoyagesSource,
   openSeaVoyagesSource,
 } from "./opensea-voyages";
@@ -37,6 +41,7 @@ import {
 const getRealSources = (): DataSource[] => [
   dailyDegenNewsSource,
   etfFlowsSource,
+  overnightFuturesSource,
   economicCalendarSource,
   polymarketMoversSource,
   polymarketTopMarketsSource,
@@ -47,6 +52,7 @@ const getRealSources = (): DataSource[] => [
 const getMockSources = (): DataSource[] => [
   mockDailyDegenNewsSource,
   mockETFFlowsSource,
+  mockOvernightFuturesSource,
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
