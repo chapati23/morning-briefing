@@ -180,6 +180,27 @@ const getBodyText = async (page: Page): Promise<string> => {
   return typeof result === "string" ? result : "";
 };
 
+const MAX_NAV_RETRIES = 2;
+
+const navigateWithRetry = async (page: Page, url: string): Promise<void> => {
+  for (let attempt = 1; attempt <= MAX_NAV_RETRIES; attempt++) {
+    try {
+      await page.goto(url, {
+        waitUntil: "domcontentloaded",
+        timeout: 60_000,
+      });
+      return;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (attempt < MAX_NAV_RETRIES && msg.includes("timeout")) {
+        log(`Navigation attempt ${attempt} timed out, retrying...`);
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
 // ============================================================================
 // Voyage Parsing
 // ============================================================================
@@ -294,17 +315,16 @@ const fetchVoyages = async (): Promise<readonly Voyage[]> => {
     });
 
     // Step 3: Navigate to OpenSea rewards
+    // Use "domcontentloaded" instead of "networkidle2" — OpenSea's SPA maintains
+    // persistent WebSocket/analytics connections that prevent networkidle2 from
+    // ever resolving, causing consistent 30s timeouts in production.
     log("Navigating to OpenSea rewards...");
-    await page.goto(OPENSEA_REWARDS_URL, {
-      waitUntil: "networkidle2",
-      timeout: 30_000,
-    });
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await navigateWithRetry(page, OPENSEA_REWARDS_URL);
 
-    // Step 4: Enter email
+    // Step 4: Wait for the SPA to render the email input
     log("Waiting for email input...");
     const emailInput = await page.waitForSelector('input[name="email"]', {
-      timeout: 10_000,
+      timeout: 30_000,
     });
     if (!emailInput) {
       log("Could not find email input");
@@ -455,7 +475,7 @@ const fetchVoyages = async (): Promise<readonly Voyage[]> => {
 export const openSeaVoyagesSource: DataSource = {
   name: "OpenSea Voyages",
   priority: 8,
-  timeoutMs: 90_000, // Email OTP flow is slow (~60-80s)
+  timeoutMs: 150_000, // Email OTP flow (~60s) + browser/navigation (~60s) + retry buffer
 
   fetch: async (): Promise<BriefingSection> => {
     if (!process.env["AGENTMAIL_API_KEY"]?.trim()) {
