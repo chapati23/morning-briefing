@@ -180,6 +180,10 @@ const getBodyText = async (page: Page): Promise<string> => {
   return typeof result === "string" ? result : "";
 };
 
+const EMAIL_SELECTOR = 'input[name="email"]';
+const EMAIL_SELECTOR_TIMEOUT_MS = 45_000;
+const EMAIL_SELECTOR_MAX_ATTEMPTS = 2;
+
 const MAX_NAV_RETRIES = 2;
 
 const navigateWithRetry = async (page: Page, url: string): Promise<void> => {
@@ -199,6 +203,37 @@ const navigateWithRetry = async (page: Page, url: string): Promise<void> => {
       throw error;
     }
   }
+};
+
+/**
+ * Wait for the email input to appear, retrying with a page reload if the SPA
+ * hydration is too slow (common on resource-constrained Cloud Run containers).
+ */
+const waitForEmailInput = async (
+  page: Page,
+): Promise<Awaited<ReturnType<Page["waitForSelector"]>> | null> => {
+  for (let attempt = 1; attempt <= EMAIL_SELECTOR_MAX_ATTEMPTS; attempt++) {
+    log(
+      `Waiting for email input (attempt ${attempt}/${EMAIL_SELECTOR_MAX_ATTEMPTS})...`,
+    );
+    try {
+      const el = await page.waitForSelector(EMAIL_SELECTOR, {
+        timeout: EMAIL_SELECTOR_TIMEOUT_MS,
+      });
+      if (el) return el;
+    } catch {
+      if (attempt < EMAIL_SELECTOR_MAX_ATTEMPTS) {
+        log("Email input not found, reloading page...");
+        await page.reload({ waitUntil: "domcontentloaded", timeout: 60_000 });
+      } else {
+        log("Email input not found after all attempts");
+        throw new Error(
+          `Email input selector "${EMAIL_SELECTOR}" not found after ${EMAIL_SELECTOR_MAX_ATTEMPTS} attempts`,
+        );
+      }
+    }
+  }
+  return null;
 };
 
 // ============================================================================
@@ -321,13 +356,13 @@ const fetchVoyages = async (): Promise<readonly Voyage[]> => {
     log("Navigating to OpenSea rewards...");
     await navigateWithRetry(page, OPENSEA_REWARDS_URL);
 
-    // Step 4: Wait for the SPA to render the email input
-    log("Waiting for email input...");
-    const emailInput = await page.waitForSelector('input[name="email"]', {
-      timeout: 30_000,
-    });
+    // Step 4: Wait for the SPA to render the email input.
+    // OpenSea's SPA hydrates the login form after initial page load.
+    // On resource-constrained environments (Cloud Run) this can take >30s,
+    // so we retry with a page reload (cached assets make the second attempt faster).
+    const emailInput = await waitForEmailInput(page);
     if (!emailInput) {
-      log("Could not find email input");
+      log("Could not find email input after retries");
       return [];
     }
 

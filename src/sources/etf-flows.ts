@@ -7,7 +7,7 @@
 
 import * as cheerio from "cheerio";
 import { backOff } from "exponential-backoff";
-import puppeteer from "puppeteer";
+import puppeteer, { type Browser } from "puppeteer";
 import type { BriefingSection, DataSource, ETFFlow } from "../types";
 import { withCache } from "../utils";
 
@@ -182,48 +182,57 @@ export const buildETFItem = (
 export const etfFlowsSource: DataSource = {
   name: "ETF Flows",
   priority: 3,
+  timeoutMs: 90_000,
 
   fetch: async (date: Date): Promise<BriefingSection> => {
     console.log(
       "[etf-flows] Starting ETF flows fetch (BTC, ETH, SOL in parallel)...",
     );
 
-    // Use allSettled for partial success - if 1-2 fail, we still show the rest
-    const results = await Promise.allSettled([
-      fetchETFFlows(BTC_ETF_URL, "BTC"),
-      fetchETFFlows(ETH_ETF_URL, "ETH"),
-      fetchETFFlows(SOL_ETF_URL, "SOL"),
-    ]);
+    console.log("[etf-flows] Launching shared browser...");
+    const browser = await launchETFBrowser();
 
-    const [btcResult, ethResult, solResult] = results;
+    try {
+      // Use allSettled for partial success - if 1-2 fail, we still show the rest
+      const results = await Promise.allSettled([
+        fetchETFFlows(browser, BTC_ETF_URL, "BTC"),
+        fetchETFFlows(browser, ETH_ETF_URL, "ETH"),
+        fetchETFFlows(browser, SOL_ETF_URL, "SOL"),
+      ]);
 
-    // Check if ALL failed - only then throw
-    const allFailed = results.every((r) => r.status === "rejected");
-    if (allFailed) {
-      const errors = results
-        .map((r) =>
-          r.status === "rejected"
-            ? r.reason instanceof Error
-              ? r.reason.message
-              : String(r.reason)
-            : "",
-        )
-        .filter(Boolean)
-        .join("; ");
-      throw new Error(`All ETF fetches failed: ${errors}`);
+      const [btcResult, ethResult, solResult] = results;
+
+      // Check if ALL failed - only then throw
+      const allFailed = results.every((r) => r.status === "rejected");
+      if (allFailed) {
+        const errors = results
+          .map((r) =>
+            r.status === "rejected"
+              ? r.reason instanceof Error
+                ? r.reason.message
+                : String(r.reason)
+              : "",
+          )
+          .filter(Boolean)
+          .join("; ");
+        throw new Error(`All ETF fetches failed: ${errors}`);
+      }
+
+      const tradingDate = getPreviousTradingDay(date);
+
+      return {
+        title: `ETF Flows from ${formatTradingDate(tradingDate)}`,
+        icon: "📊",
+        items: [
+          buildETFItem("BTC", btcResult, BTC_ETF_URL),
+          buildETFItem("ETH", ethResult, ETH_ETF_URL),
+          buildETFItem("SOL", solResult, SOL_ETF_URL),
+        ],
+      };
+    } finally {
+      console.log("[etf-flows] Closing shared browser...");
+      await browser.close();
     }
-
-    const tradingDate = getPreviousTradingDay(date);
-
-    return {
-      title: `ETF Flows from ${formatTradingDate(tradingDate)}`,
-      icon: "📊",
-      items: [
-        buildETFItem("BTC", btcResult, BTC_ETF_URL),
-        buildETFItem("ETH", ethResult, ETH_ETF_URL),
-        buildETFItem("SOL", solResult, SOL_ETF_URL),
-      ],
-    };
   },
 };
 
@@ -238,17 +247,30 @@ const log = (type: "BTC" | "ETH" | "SOL", message: string): void => {
 // Cache TTL: 6 hours (data only changes once per trading day)
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 
+const launchETFBrowser = async (): Promise<Browser> =>
+  puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-infobars",
+      "--window-size=1920,1080",
+    ],
+  });
+
 /**
  * Fetch ETF flows with caching (for development) and retry (for reliability).
  */
 const fetchETFFlows = async (
+  browser: Browser,
   url: string,
   type: "BTC" | "ETH" | "SOL",
 ): Promise<ETFFlow[]> => {
   const today = new Date().toISOString().split("T")[0];
   const cacheKey = `etf-flows-${type}-${today}`;
 
-  return withCache(cacheKey, () => fetchETFFlowsWithRetry(url, type), {
+  return withCache(cacheKey, () => fetchETFFlowsWithRetry(browser, url, type), {
     ttlMs: CACHE_TTL_MS,
   });
 };
@@ -257,10 +279,11 @@ const fetchETFFlows = async (
  * Fetch ETF flows with retry logic for handling transient failures.
  */
 const fetchETFFlowsWithRetry = async (
+  browser: Browser,
   url: string,
   type: "BTC" | "ETH" | "SOL",
 ): Promise<ETFFlow[]> => {
-  return backOff(() => fetchETFFlowsFromBrowser(url, type), {
+  return backOff(() => scrapeETFPage(browser, url, type), {
     numOfAttempts: 4, // 1 initial + 3 retries
     startingDelay: 1000,
     timeMultiple: 2,
@@ -274,33 +297,18 @@ const fetchETFFlowsWithRetry = async (
 };
 
 /**
- * Core browser-based fetch logic (single attempt).
+ * Scrape a single ETF page using a tab in the shared browser.
  */
-const fetchETFFlowsFromBrowser = async (
+const scrapeETFPage = async (
+  browser: Browser,
   url: string,
   type: "BTC" | "ETH" | "SOL",
 ): Promise<ETFFlow[]> => {
-  let browser;
+  log(type, "Creating page...");
+  const page = await browser.newPage();
+
   try {
-    log(type, "Launching browser...");
-    browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-blink-features=AutomationControlled",
-        "--disable-infobars",
-        "--window-size=1920,1080",
-      ],
-    });
-
-    log(type, "Creating page...");
-    const page = await browser.newPage();
-
-    // Set a realistic viewport
     await page.setViewport({ width: 1920, height: 1080 });
-
-    // Set realistic headers to avoid bot detection
     await page.setExtraHTTPHeaders({
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -309,7 +317,6 @@ const fetchETFFlowsFromBrowser = async (
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
     });
 
-    // Remove webdriver property to avoid detection
     await page.evaluateOnNewDocument(() => {
       Object.defineProperty(navigator, "webdriver", {
         get: () => false,
@@ -319,16 +326,12 @@ const fetchETFFlowsFromBrowser = async (
     log(type, `Navigating to ${url}...`);
     await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
 
-    // Check if we hit a Cloudflare challenge page
     const pageTitle = await page.title();
     if (pageTitle.includes("Just a moment")) {
       log(type, "Detected Cloudflare challenge, waiting for it to pass...");
-      // Wait for the challenge to complete (Cloudflare usually resolves within 5-10s)
-      // The function runs in browser context where document is available
       await page.waitForFunction(`!document.title.includes("Just a moment")`, {
         timeout: 15000,
       });
-      // Wait for content to load after challenge
       await page.waitForNetworkIdle({ timeout: 10000 });
     }
 
@@ -345,10 +348,8 @@ const fetchETFFlowsFromBrowser = async (
     log(type, `Error: ${message}`);
     throw error;
   } finally {
-    if (browser) {
-      log(type, "Closing browser...");
-      await browser.close();
-    }
+    log(type, "Closing page...");
+    await page.close();
   }
 };
 
