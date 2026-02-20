@@ -207,8 +207,8 @@ describe("getSentimentEmoji", () => {
     expect(getSentimentEmoji("negative")).toBe("🔴");
   });
 
-  it("returns empty string for neutral", () => {
-    expect(getSentimentEmoji("neutral")).toBe("");
+  it("returns ⚪ for neutral (flat/unchanged)", () => {
+    expect(getSentimentEmoji("neutral")).toBe("⚪");
   });
 
   it("returns empty string for undefined", () => {

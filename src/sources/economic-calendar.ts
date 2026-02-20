@@ -111,7 +111,6 @@ const createBriefingItem = (
   return {
     text: formatEventText(event),
     detail,
-    sentiment: "neutral" as const,
     time: eventDate,
     timePrefix: options.includeWeekday ? formatWeekday(eventDate) : undefined,
     url: eventUrl,
@@ -388,8 +387,28 @@ const WEEKDAY_NAMES = [
 const formatWeekday = (date: Date): string =>
   WEEKDAY_NAMES[date.getDay()] ?? "???";
 
+/**
+ * Resolve the effective country for an event, correcting known data-quality issues.
+ *
+ * TradingView assigns country="GB" to S&P Global PMI Flash events because S&P Global
+ * (formerly IHS Markit) is headquartered in the UK — even when the event measures the
+ * US economy.  If the title doesn't explicitly reference UK / United Kingdom, treat it
+ * as a US reading.
+ */
+export const getEffectiveCountry = (event: TradingViewEvent): string => {
+  if (
+    event.country === "GB" &&
+    /^s&p global\b/i.test(event.title) &&
+    !/\b(uk|united kingdom|britain|british)\b/i.test(event.title)
+  ) {
+    return "US";
+  }
+  return event.country;
+};
+
 const formatEventText = (event: TradingViewEvent): string => {
-  const flag = COUNTRY_FLAGS.get(event.country) ?? "🌍";
+  const country = getEffectiveCountry(event);
+  const flag = COUNTRY_FLAGS.get(country) ?? "🌍";
   return `${flag} ${event.title}`;
 };
 

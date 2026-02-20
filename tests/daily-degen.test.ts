@@ -210,6 +210,24 @@ describe("shouldSkipItem", () => {
     ).toBe(true);
   });
 
+  it("skips episode items", () => {
+    expect(
+      shouldSkipItem("New Cheeky Pint episode from Stripe"),
+    ).toBe(true);
+    expect(
+      shouldSkipItem("New @therollupco episode on Ethereum scaling:"),
+    ).toBe(true);
+  });
+
+  it("skips livestream items", () => {
+    expect(
+      shouldSkipItem("Yesterday's livestream from @theollupco"),
+    ).toBe(true);
+    expect(
+      shouldSkipItem("New livestream from @bankless on Ethereum ETFs:"),
+    ).toBe(true);
+  });
+
   it("keeps actual news items", () => {
     expect(
       shouldSkipItem(

@@ -23,7 +23,7 @@ const SECTION_HEADING = "Important News And Analysis";
 
 /**
  * Items matching any of these patterns are filtered out (videos, podcasts,
- * interviews, motivational fluff).
+ * episodes, livestreams, interviews, motivational fluff).
  */
 const SKIP_PATTERNS: readonly RegExp[] = [
   /^new .+ interview/i,
@@ -42,6 +42,10 @@ const SKIP_PATTERNS: readonly RegExp[] = [
   /parting wisdom/i,
   /chase your dreams/i,
   /don't forget to/i,
+  // Episode and livestream content (e.g. "New Cheeky Pint episode from Stripe",
+  // "Yesterday's livestream from @theollupco")
+  /^new .+ episode/i,
+  /\blivestrea/i,
 ];
 
 // ============================================================================

@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  getEffectiveCountry,
   getNextWeekRange,
   getTopEvents,
   isWeekend,
@@ -360,5 +361,61 @@ describe("getTopEvents", () => {
       "wed-gdp-eu",
       "mon-pmi",
     ]);
+  });
+});
+
+// ============================================================================
+// getEffectiveCountry
+// ============================================================================
+
+describe("getEffectiveCountry", () => {
+  it("returns US for S&P Global Services PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Services PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("returns US for S&P Global Manufacturing PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Manufacturing PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("returns US for S&P Global Composite PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Composite PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("keeps GB for S&P Global events that explicitly mention UK in the title", () => {
+    const event = createEvent({
+      title: "S&P Global UK Services PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("GB");
+  });
+
+  it("keeps GB for non-S&P Global events", () => {
+    const event = createEvent({ title: "Unemployment Rate", country: "GB" });
+    expect(getEffectiveCountry(event)).toBe("GB");
+  });
+
+  it("does not affect US events", () => {
+    const event = createEvent({ title: "Nonfarm Payrolls", country: "US" });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("does not affect non-GB S&P Global events", () => {
+    const event = createEvent({
+      title: "S&P Global Eurozone Services PMI Flash",
+      country: "EU",
+    });
+    expect(getEffectiveCountry(event)).toBe("EU");
   });
 });

@@ -196,6 +196,9 @@ export const getSentimentEmoji = (
     case "negative": {
       return "🔴";
     }
+    case "neutral": {
+      return "⚪";
+    }
     default: {
       return "";
     }
