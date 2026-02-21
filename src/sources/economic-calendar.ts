@@ -295,7 +295,9 @@ export const getTopEvents = (
       if (scoreDiff !== 0) return scoreDiff;
       return a.date.localeCompare(b.date);
     })
-    .slice(0, limit);
+    .slice(0, limit)
+    // Re-sort selected events chronologically for display
+    .sort((a, b) => a.date.localeCompare(b.date));
 
 // ============================================================================
 // API Client
