@@ -46,6 +46,15 @@ const SKIP_PATTERNS: readonly RegExp[] = [
   // "Yesterday's livestream from @theollupco")
   /^new .+ episode/i,
   /\blivestrea/i,
+  // "New discussion from @pod", "New edition of @pod", "A new Macro Voices interview"
+  /^(?:a )?new .+ discussion/i,
+  /^(?:a )?new discussion/i,
+  /^(?:another )?new .+ edition/i,
+  /^(?:a )?new .+ interview/i,
+  /\bedition of @/i,
+  // Catch-all: any item that's essentially "go watch/listen to this content"
+  /\b(?:aired|published|dropped)\s+\d+\s+hours?\s+ago/i,
+  /\b(?:aired|published|dropped)\s+one\s+hour\s+ago/i,
 ];
 
 // ============================================================================
