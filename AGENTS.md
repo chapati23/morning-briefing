@@ -14,7 +14,7 @@ Daily financial briefing service that aggregates market data from multiple sourc
 
 ## Architecture (read this, skip the code)
 
-```
+```text
 src/
 ├── index.ts              # Cloud Run HTTP server (GET /health, POST /briefing)
 ├── dev.ts                # Local dev CLI (--dry-run, --source, --date, --mock)
@@ -58,8 +58,8 @@ src/
 ```typescript
 interface DataSource {
   name: string;
-  priority: number;       // Lower = higher in briefing
-  timeoutMs?: number;     // Per-source timeout (default 45s)
+  priority: number; // Lower = higher in briefing
+  timeoutMs?: number; // Per-source timeout (default 45s)
   fetch(date: Date): Promise<BriefingSection>;
 }
 
@@ -121,12 +121,13 @@ bun run healthcheck              # Hit /health endpoint
 This is the most common change. Follow this pattern exactly:
 
 1. Create `src/sources/my-source.ts` implementing `DataSource`:
+
    ```typescript
    import type { DataSource } from "../types";
 
    export const mySource: DataSource = {
      name: "My Source",
-     priority: 50,  // Adjust relative to others
+     priority: 50, // Adjust relative to others
      fetch: async (date) => ({
        title: "My Source",
        icon: "📊",
@@ -135,7 +136,9 @@ This is the most common change. Follow this pattern exactly:
    };
 
    // Mock version for testing
-   export const mockMySource: DataSource = { /* ... */ };
+   export const mockMySource: DataSource = {
+     /* ... */
+   };
    ```
 
 2. Register in `src/sources/index.ts`:
@@ -168,16 +171,16 @@ This is the most common change. Follow this pattern exactly:
 
 ### Test file mapping
 
-| Source | Test |
-|--------|------|
-| `src/orchestrator.ts` | `tests/orchestrator.test.ts` |
-| `src/channels/telegram.ts` | `tests/telegram.test.ts` |
-| `src/sources/polymarket.ts` | `tests/polymarket.test.ts` |
-| `src/sources/etf-flows.ts` | `tests/trading-day.test.ts` |
-| `src/sources/daily-degen.ts` | `tests/daily-degen.test.ts` |
-| `src/sources/appstore-rankings.ts` | `tests/appstore-rankings.test.ts` |
-| `src/sources/opensea-voyages.ts` | `tests/opensea-voyages.test.ts` |
-| `src/utils/cache.ts` | `tests/cache.test.ts` |
+| Source                                  | Test                                    |
+| --------------------------------------- | --------------------------------------- |
+| `src/orchestrator.ts`                   | `tests/orchestrator.test.ts`            |
+| `src/channels/telegram.ts`              | `tests/telegram.test.ts`                |
+| `src/sources/polymarket.ts`             | `tests/polymarket.test.ts`              |
+| `src/sources/etf-flows.ts`              | `tests/trading-day.test.ts`             |
+| `src/sources/daily-degen.ts`            | `tests/daily-degen.test.ts`             |
+| `src/sources/appstore-rankings.ts`      | `tests/appstore-rankings.test.ts`       |
+| `src/sources/opensea-voyages.ts`        | `tests/opensea-voyages.test.ts`         |
+| `src/utils/cache.ts`                    | `tests/cache.test.ts`                   |
 | `src/config/polymarket-correlations.ts` | `tests/polymarket-correlations.test.ts` |
 
 ## Infrastructure Rules
@@ -191,16 +194,16 @@ This is the most common change. Follow this pattern exactly:
 
 ## Environment Variables
 
-| Variable | Required | Default | Purpose |
-|----------|----------|---------|---------|
-| `TELEGRAM_BOT_TOKEN` | Yes (prod) | — | Bot API token from @BotFather |
-| `TELEGRAM_CHAT_ID` | Yes (prod) | — | Target chat for briefings |
-| `AGENTMAIL_API_KEY` | No | — | For email-based sources (Daily Degen, OpenSea) |
-| `TIMEZONE` | No | `Europe/Berlin` | Briefing timezone |
-| `USE_MOCK_DATA` | No | `false` | Use mock sources |
-| `LOG_LEVEL` | No | `info` | Logging verbosity |
-| `PORT` | No | `8080` | HTTP server port |
-| `GCS_DATA_BUCKET` | No | — | GCS bucket for rankings history (set by Terraform) |
+| Variable             | Required   | Default         | Purpose                                            |
+| -------------------- | ---------- | --------------- | -------------------------------------------------- |
+| `TELEGRAM_BOT_TOKEN` | Yes (prod) | —               | Bot API token from @BotFather                      |
+| `TELEGRAM_CHAT_ID`   | Yes (prod) | —               | Target chat for briefings                          |
+| `AGENTMAIL_API_KEY`  | No         | —               | For email-based sources (Daily Degen, OpenSea)     |
+| `TIMEZONE`           | No         | `Europe/Berlin` | Briefing timezone                                  |
+| `USE_MOCK_DATA`      | No         | `false`         | Use mock sources                                   |
+| `LOG_LEVEL`          | No         | `info`          | Logging verbosity                                  |
+| `PORT`               | No         | `8080`          | HTTP server port                                   |
+| `GCS_DATA_BUCKET`    | No         | —               | GCS bucket for rankings history (set by Terraform) |
 
 ## Git & CI/CD
 

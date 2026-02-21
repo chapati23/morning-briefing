@@ -29,6 +29,9 @@ lint:
       paths:
         - node_modules/**
         - dist/**
+    - linters: [osv-scanner]
+      paths:
+        - bun.lock # ajv 6.12.6 ReDoS (GHSA-2g4f-4pwh-qvx6) — transitive dep, no upgrade available
 actions:
   disabled:
     - trunk-check-pre-push # Disabled in favor of trunk-check-all-pre-push
