@@ -211,21 +211,51 @@ describe("shouldSkipItem", () => {
   });
 
   it("skips episode items", () => {
-    expect(
-      shouldSkipItem("New Cheeky Pint episode from Stripe"),
-    ).toBe(true);
+    expect(shouldSkipItem("New Cheeky Pint episode from Stripe")).toBe(true);
     expect(
       shouldSkipItem("New @therollupco episode on Ethereum scaling:"),
     ).toBe(true);
   });
 
   it("skips livestream items", () => {
-    expect(
-      shouldSkipItem("Yesterday's livestream from @theollupco"),
-    ).toBe(true);
+    expect(shouldSkipItem("Yesterday's livestream from @theollupco")).toBe(
+      true,
+    );
     expect(
       shouldSkipItem("New livestream from @bankless on Ethereum ETFs:"),
     ).toBe(true);
+  });
+
+  it("skips discussion/edition/interview items", () => {
+    expect(
+      shouldSkipItem(
+        "New discussion from @thebellcurvepod (aired 8 hours ago)",
+      ),
+    ).toBe(true);
+    expect(
+      shouldSkipItem(
+        "A new Macro Voices interview with someone named Michael Every on the topic of stablecoins",
+      ),
+    ).toBe(true);
+    expect(
+      shouldSkipItem("New edition of @theempirepod (aired three hours ago)"),
+    ).toBe(true);
+    expect(
+      shouldSkipItem(
+        "Another new edition of @theempirepod (aired 26 hours ago)",
+      ),
+    ).toBe(true);
+  });
+
+  it("skips items mentioning 'aired X hours ago'", () => {
+    expect(
+      shouldSkipItem(
+        "New @noahseidman livestream on crypto + macro (aired one hour ago)",
+      ),
+    ).toBe(true);
+    expect(shouldSkipItem("Some podcast content (aired 8 hours ago)")).toBe(
+      true,
+    );
   });
 
   it("keeps actual news items", () => {

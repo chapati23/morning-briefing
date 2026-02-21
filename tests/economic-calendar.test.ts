@@ -348,18 +348,14 @@ describe("getTopEvents", () => {
 
     const ids = top5.map((e) => e.id);
 
-    // Expected order by score:
-    // 1. US CPI: 10 * 1.5 = 15
-    // 2. US Initial Jobless Claims: 8 * 1.5 = 12
-    // 3. US Retail Sales: 8 * 1.5 = 12 (tiebreak: later date than claims)
-    // 4. EU GDP: 8 * 1.2 = 9.6
-    // 5. US ISM Manufacturing PMI: 6 * 1.5 = 9
+    // Top 5 by score: CPI(15), Claims(12), Retail(12), GDP-EU(9.6), PMI(9)
+    // Then re-sorted chronologically for display (Mon → Fri)
     expect(ids).toEqual([
+      "mon-pmi",
       "tue-cpi",
+      "wed-gdp-eu",
       "thu-claims",
       "fri-retail",
-      "wed-gdp-eu",
-      "mon-pmi",
     ]);
   });
 });
