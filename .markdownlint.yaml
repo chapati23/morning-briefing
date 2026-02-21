@@ -1,0 +1,3 @@
+# Disable MD013 (line length) — prettier handles line wrapping and produces
+# long lines for tables/links that markdownlint would flag.
+MD013: false

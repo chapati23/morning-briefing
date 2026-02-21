@@ -1,0 +1,4 @@
+[[IgnoredVulns]]
+id = "GHSA-2g4f-4pwh-qvx6"
+reason = "ajv 6.12.6 ReDoS via $data option — transitive dep, no upgrade path available"
+ignoreUntil = 2026-06-01

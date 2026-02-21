@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  getEffectiveCountry,
   getNextWeekRange,
   getTopEvents,
   isWeekend,
@@ -347,18 +348,70 @@ describe("getTopEvents", () => {
 
     const ids = top5.map((e) => e.id);
 
-    // Expected order by score:
-    // 1. US CPI: 10 * 1.5 = 15
-    // 2. US Initial Jobless Claims: 8 * 1.5 = 12
-    // 3. US Retail Sales: 8 * 1.5 = 12 (tiebreak: later date than claims)
-    // 4. EU GDP: 8 * 1.2 = 9.6
-    // 5. US ISM Manufacturing PMI: 6 * 1.5 = 9
+    // Top 5 by score: CPI(15), Claims(12), Retail(12), GDP-EU(9.6), PMI(9)
+    // Then re-sorted chronologically for display (Mon → Fri)
     expect(ids).toEqual([
+      "mon-pmi",
       "tue-cpi",
+      "wed-gdp-eu",
       "thu-claims",
       "fri-retail",
-      "wed-gdp-eu",
-      "mon-pmi",
     ]);
+  });
+});
+
+// ============================================================================
+// getEffectiveCountry
+// ============================================================================
+
+describe("getEffectiveCountry", () => {
+  it("returns US for S&P Global Services PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Services PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("returns US for S&P Global Manufacturing PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Manufacturing PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("returns US for S&P Global Composite PMI Flash attributed to GB", () => {
+    const event = createEvent({
+      title: "S&P Global Composite PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("keeps GB for S&P Global events that explicitly mention UK in the title", () => {
+    const event = createEvent({
+      title: "S&P Global UK Services PMI Flash",
+      country: "GB",
+    });
+    expect(getEffectiveCountry(event)).toBe("GB");
+  });
+
+  it("keeps GB for non-S&P Global events", () => {
+    const event = createEvent({ title: "Unemployment Rate", country: "GB" });
+    expect(getEffectiveCountry(event)).toBe("GB");
+  });
+
+  it("does not affect US events", () => {
+    const event = createEvent({ title: "Nonfarm Payrolls", country: "US" });
+    expect(getEffectiveCountry(event)).toBe("US");
+  });
+
+  it("does not affect non-GB S&P Global events", () => {
+    const event = createEvent({
+      title: "S&P Global Eurozone Services PMI Flash",
+      country: "EU",
+    });
+    expect(getEffectiveCountry(event)).toBe("EU");
   });
 });

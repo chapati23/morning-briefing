@@ -1,4 +1,4 @@
 [codespell]
 # Ignore ticker symbols and other domain-specific terms
 # afterAll is a common test lifecycle function name
-ignore-words-list = ethe,dota,serie,ons,afterall,nd
+ignore-words-list = ethe,dota,serie,ons,afterall,nd,ihs

@@ -333,12 +333,14 @@ const buildBriefingItems = (
       referenceDate,
     );
 
+    const trendLine = formatTrendLine(trends);
     return {
       app,
       ranking,
       item: {
-        text: formatPositionText(app, ranking),
-        detail: formatTrendLine(trends),
+        text: trendLine
+          ? `${formatPositionText(app, ranking)} (${trendLine})`
+          : formatPositionText(app, ranking),
         sentiment: getSentiment(trends),
       },
     };
@@ -415,13 +417,11 @@ export const mockAppStoreRankingsSource: DataSource = {
     icon: "📱",
     items: [
       {
-        text: "Coinbase: #35 overall · #12 Finance",
-        detail: "↑5 daily · ↑12 weekly · ↑25 monthly",
+        text: "Coinbase: #35 overall · #12 Finance (↑5 daily · ↑12 weekly · ↑25 monthly)",
         sentiment: "positive",
       },
       {
-        text: "Polymarket: #128 Finance",
-        detail: "↓46 daily · ↓42 weekly",
+        text: "Polymarket: #128 Finance (↓46 daily · ↓42 weekly)",
         sentiment: "negative",
       },
       {
