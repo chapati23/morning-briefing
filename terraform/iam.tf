@@ -57,6 +57,14 @@ resource "google_storage_bucket_iam_member" "cloudrun_data_bucket" {
   member = "serviceAccount:${google_service_account.cloudrun.email}"
 }
 
+# Giskard (bot) service account — created externally, referenced here for IAM bindings
+# Allows Giskard to trigger the scheduler job for production testing
+resource "google_project_iam_member" "giskard_scheduler_run" {
+  project = var.project_id
+  role    = "roles/cloudscheduler.jobRunner"
+  member  = "serviceAccount:giskard-readonly@${var.project_id}.iam.gserviceaccount.com"
+}
+
 # Grant GitHub Actions SA permission to act as the Cloud Run service account
 resource "google_service_account_iam_member" "github_actions_act_as_cloudrun" {
   service_account_id = google_service_account.cloudrun.name
