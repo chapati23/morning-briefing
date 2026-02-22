@@ -1,0 +1,40 @@
+---
+description: Git branching and PR workflow for all changes
+alwaysApply: true
+---
+
+# Git Workflow
+
+**Never push directly to `main`.** No exceptions — not even one-liners or typo fixes.
+
+## Required Workflow
+
+```bash
+# 1. Branch off main
+git checkout main && git pull origin main
+git checkout -b <type>/<short-description>
+
+# 2. Make changes, commit
+git add -A
+git commit -m "<type>: <description>"
+
+# 3. Run checks before pushing (see post-change-checks rule)
+bun run typecheck && trunk check --fix && bun test
+
+# 4. Push and open PR
+git push origin <branch>
+gh pr create --base main --title "..." --body "..."
+```
+
+## Branch Naming
+
+| Type | When |
+| --- | --- |
+| `feature/` | New functionality |
+| `fix/` | Bug fixes |
+| `chore/` | Docs, deps, config, refactoring |
+
+## Why
+
+CI deploys on push to `main`. Unreviewed changes go straight to production.
+PRs give a chance to catch issues before they affect the daily briefing.
