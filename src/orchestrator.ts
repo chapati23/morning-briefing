@@ -59,7 +59,12 @@ export const runBriefing = async (
 
     if (result.status === "fulfilled") {
       console.log(`[orchestrator] ✓ ${source.name} succeeded`);
-      sections.push(result.value);
+      const value = result.value;
+      if (Array.isArray(value)) {
+        sections.push(...value);
+      } else {
+        sections.push(value);
+      }
     } else {
       const errorMessage =
         result.reason instanceof Error

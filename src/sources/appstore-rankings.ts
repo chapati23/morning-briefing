@@ -16,7 +16,7 @@ import type {
   DataSource,
   Sentiment,
 } from "../types";
-import type { DailyAppRanking, DailySnapshot, RankingsHistory } from "../utils";
+import type { DailySnapshot, RankingsHistory } from "../utils";
 import {
   formatDateKey,
   loadRankingsHistory,
@@ -289,73 +289,123 @@ export const getSentiment = (trends: AppTrends): Sentiment | undefined => {
   return "neutral";
 };
 
-/** Format the position text for a single app (e.g., "#35 overall · #12 Finance"). */
-export const formatPositionText = (
+/** Format the position text for a Finance-section item (rank only, no "Finance" label). */
+export const formatFinancePositionText = (
   app: TrackedApp,
-  ranking: DailyAppRanking,
-): string => {
-  const parts: string[] = [app.name];
+  rank: number,
+): string => `${app.name}: ${formatRank(rank)}`;
 
-  if (ranking.overall === null && ranking.finance === null) {
-    parts.push("unranked");
-  } else if (ranking.overall !== null && ranking.finance !== null) {
-    parts.push(
-      `${formatRank(ranking.overall)} overall · ${formatRank(ranking.finance)} Finance`,
-    );
-  } else if (ranking.finance === null) {
-    parts.push(`${formatRank(ranking.overall)} overall`);
-  } else {
-    parts.push(`${formatRank(ranking.finance)} Finance`);
-  }
+/** Format the position text for a Total-section item (rank only, no "overall" label). */
+export const formatOverallPositionText = (
+  app: TrackedApp,
+  rank: number,
+): string => `${app.name}: ${formatRank(rank)}`;
 
-  return parts.join(": ");
-};
+/** Compute daily/weekly/monthly trends for Overall rank of a single app. */
+const computeOverallAppTrends = (
+  history: RankingsHistory,
+  currentRank: number | null,
+  bundleId: string,
+  referenceDate: Date,
+): AppTrends => ({
+  daily: computeTrend(
+    history,
+    currentRank,
+    bundleId,
+    "overall",
+    1,
+    referenceDate,
+  ),
+  weekly: computeTrend(
+    history,
+    currentRank,
+    bundleId,
+    "overall",
+    7,
+    referenceDate,
+  ),
+  monthly: computeTrend(
+    history,
+    currentRank,
+    bundleId,
+    "overall",
+    30,
+    referenceDate,
+  ),
+});
 
-/** Build BriefingItems from current rankings + historical trends, sorted by best position. */
-const buildBriefingItems = (
+/** Build Finance-category BriefingItems — only apps ranked in Finance, sorted by rank. */
+const buildFinanceItems = (
   snapshot: DailySnapshot,
   history: RankingsHistory,
   referenceDate: Date,
 ): readonly BriefingItem[] => {
-  // Create items with app reference for sorting
-  interface ItemWithRanking {
-    readonly app: TrackedApp;
-    readonly ranking: DailyAppRanking;
+  interface ItemWithRank {
+    readonly rank: number;
     readonly item: BriefingItem;
   }
 
-  const itemsWithApps: ItemWithRanking[] = TRACKED_APPS.map((app) => {
+  return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
+    if (ranking.finance === null) return [];
+
     const trends = computeAppTrends(
       history,
       ranking.finance,
       app.bundleId,
       referenceDate,
     );
-
     const trendLine = formatTrendLine(trends);
-    return {
-      app,
-      ranking,
-      item: {
-        text: trendLine
-          ? `${formatPositionText(app, ranking)} (${trendLine})`
-          : formatPositionText(app, ranking),
-        sentiment: getSentiment(trends),
-      },
-    };
-  });
+    const text = trendLine
+      ? `${formatFinancePositionText(app, ranking.finance)} (${trendLine})`
+      : formatFinancePositionText(app, ranking.finance);
 
-  // Sort by best (lowest) position first: Overall preferred, then finance category, unranked last
-  return itemsWithApps
-    .sort((a: ItemWithRanking, b: ItemWithRanking) => {
-      const aRank =
-        a.ranking.overall ?? a.ranking.finance ?? Number.MAX_SAFE_INTEGER;
-      const bRank =
-        b.ranking.overall ?? b.ranking.finance ?? Number.MAX_SAFE_INTEGER;
-      return aRank - bRank;
-    })
-    .map(({ item }: ItemWithRanking) => item);
+    return [
+      {
+        rank: ranking.finance,
+        item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
+      },
+    ];
+  })
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ item }) => item);
+};
+
+/** Build Overall/Total BriefingItems — only apps ranked in the overall top 100, sorted by rank. */
+const buildOverallItems = (
+  snapshot: DailySnapshot,
+  history: RankingsHistory,
+  referenceDate: Date,
+): readonly BriefingItem[] => {
+  interface ItemWithRank {
+    readonly rank: number;
+    readonly item: BriefingItem;
+  }
+
+  return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
+    const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
+    if (ranking.overall === null) return [];
+
+    const trends = computeOverallAppTrends(
+      history,
+      ranking.overall,
+      app.bundleId,
+      referenceDate,
+    );
+    const trendLine = formatTrendLine(trends);
+    const text = trendLine
+      ? `${formatOverallPositionText(app, ranking.overall)} (${trendLine})`
+      : formatOverallPositionText(app, ranking.overall);
+
+    return [
+      {
+        rank: ranking.overall,
+        item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
+      },
+    ];
+  })
+    .sort((a, b) => a.rank - b.rank)
+    .map(({ item }) => item);
 };
 
 // ============================================================================
@@ -367,7 +417,7 @@ export const appStoreRankingsSource: DataSource = {
   priority: 7,
   timeoutMs: 30_000,
 
-  fetch: async (): Promise<BriefingSection> => {
+  fetch: async (): Promise<BriefingSection[]> => {
     console.log("[appstore-rankings] Starting App Store rankings fetch...");
 
     // Fetch current rankings from both APIs
@@ -378,7 +428,8 @@ export const appStoreRankingsSource: DataSource = {
 
     // Build items with trend data from history
     const today = new Date();
-    const items = buildBriefingItems(snapshot, history, today);
+    const financeItems = buildFinanceItems(snapshot, history, today);
+    const overallItems = buildOverallItems(snapshot, history, today);
 
     // Save today's snapshot to history (for future trend calculations).
     // Failure to save is non-fatal: the current briefing data is still valid,
@@ -396,11 +447,24 @@ export const appStoreRankingsSource: DataSource = {
       );
     }
 
-    return {
-      title: "App Store Rankings",
-      icon: "📱",
-      items,
-    };
+    const sections: BriefingSection[] = [
+      {
+        title: "App Store · Finance",
+        icon: "📱",
+        items: financeItems,
+      },
+    ];
+
+    // Only include Total section if at least one app cracked the overall top 100
+    if (overallItems.length > 0) {
+      sections.push({
+        title: "App Store · Total",
+        icon: "📱",
+        items: overallItems,
+      });
+    }
+
+    return sections;
   },
 };
 
@@ -412,24 +476,30 @@ export const mockAppStoreRankingsSource: DataSource = {
   name: "App Store Rankings",
   priority: 7,
 
-  fetch: async (): Promise<BriefingSection> => ({
-    title: "App Store Rankings",
-    icon: "📱",
-    items: [
-      {
-        text: "Coinbase: #35 overall · #12 Finance (↑5 daily · ↑12 weekly · ↑25 monthly)",
-        sentiment: "positive",
-      },
-      {
-        text: "Polymarket: #128 Finance (↓46 daily · ↓42 weekly)",
-        sentiment: "negative",
-      },
-      {
-        text: "Kraken: unranked",
-      },
-      {
-        text: "Crypto.com: unranked",
-      },
-    ],
-  }),
+  fetch: async (): Promise<BriefingSection[]> => [
+    {
+      title: "App Store · Finance",
+      icon: "📱",
+      items: [
+        {
+          text: "Coinbase: #12 (↑5 daily · ↑12 weekly · ↑25 monthly)",
+          sentiment: "positive",
+        },
+        {
+          text: "Polymarket: #128 (↓46 daily · ↓42 weekly)",
+          sentiment: "negative",
+        },
+      ],
+    },
+    {
+      title: "App Store · Total",
+      icon: "📱",
+      items: [
+        {
+          text: "Coinbase: #35 (↑2 daily)",
+          sentiment: "positive",
+        },
+      ],
+    },
+  ],
 };
