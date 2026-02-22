@@ -19,7 +19,7 @@ git add -A
 git commit -m "<type>: <description>"
 
 # 3. Run checks before pushing (see post-change-checks rule)
-bun run typecheck && trunk check --fix && bun test
+bun run typecheck && trunk check --fix && bun test && bun run knip
 
 # 4. Push and open PR
 git push origin <branch>

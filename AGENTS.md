@@ -100,6 +100,8 @@ channels/telegram.ts (formatBriefingForTelegram)
 1. Create `src/sources/my-source.ts` with:
 
    ```typescript
+   import type { DataSource } from "../types";
+
    export const mySource: DataSource = {
      name: "My Source",
      priority: 5,          // lower = higher in briefing
@@ -124,6 +126,18 @@ from `fetch`. The orchestrator flattens arrays automatically.
 
 ---
 
+## Code Style
+
+- **No classes** — factory functions returning interfaces (e.g. `createTelegramChannel`)
+- **Functional style** — `const` arrow functions, pure where possible
+- **Named exports only** — no default exports
+- **File naming** — kebab-case (`etf-flows.ts`, not `etfFlows.ts`)
+- **No `any`** — strict TypeScript, `noUncheckedIndexedAccess` enabled
+- **Error handling** — sources never throw; orchestrator catches via `Promise.allSettled`
+- **Telegram formatting** — MarkdownV2 requires escaping special chars; use `escapeMarkdown()` in `telegram.ts`
+
+---
+
 ## Local Dev
 
 ```bash
@@ -144,6 +158,7 @@ Always run these before committing (not just before pushing):
 bun run typecheck       # Catch type errors
 trunk check --fix       # Lint + format (catches unused imports etc.)
 bun test                # Full test suite
+bun run knip            # Dead code detection
 ```
 
 See `.cursor/rules/post-change-checks.mdc` for the full decision tree.
