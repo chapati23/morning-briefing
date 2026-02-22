@@ -10,7 +10,7 @@ export interface DataSource {
   readonly name: string;
   readonly priority: number; // Lower = higher in briefing
   readonly timeoutMs?: number; // Override default timeout for slow sources
-  fetch(date: Date): Promise<BriefingSection>;
+  fetch(date: Date): Promise<BriefingSection | BriefingSection[]>;
 }
 
 export interface BriefingSection {

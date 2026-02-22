@@ -310,7 +310,7 @@ describe("formatSection", () => {
     expect(result).toContain("[Link item](https://example.com)");
   });
 
-  it("formats ETF-style item with only value+emoji linked", () => {
+  it("formats ETF-style item with emoji on left and only value linked", () => {
     const section: BriefingSection = {
       title: "Test",
       icon: "📊",
@@ -323,10 +323,12 @@ describe("formatSection", () => {
       ],
     };
     const result = formatSection(section);
-    // Label should NOT be linked, only the value and emoji
-    expect(result).toContain("BTC ETFs:");
-    expect(result).toContain("[`+$145.2M` 🟢](https://farside.co.uk/btc/)");
-    // Should NOT have the whole thing linked
+    // Emoji should be a left-side prefix, label unlinked, only value linked
+    expect(result).toContain("🟢 BTC ETFs:");
+    expect(result).toContain("[`+$145.2M`](https://farside.co.uk/btc/)");
+    // Emoji should NOT be inside the link
+    expect(result).not.toContain("[`+$145.2M` 🟢]");
+    // Label should NOT be linked
     expect(result).not.toContain("[BTC ETFs:");
   });
 

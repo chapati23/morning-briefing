@@ -9,7 +9,8 @@
 import { describe, expect, it } from "bun:test";
 import {
   computeTrend,
-  formatPositionText,
+  formatFinancePositionText,
+  formatOverallPositionText,
   formatTrendDelta,
   formatTrendLine,
   getSentiment,
@@ -310,38 +311,29 @@ describe("getSentiment", () => {
 // formatPositionText
 // ============================================================================
 
-describe("formatPositionText", () => {
+describe("formatFinancePositionText", () => {
   const app = { name: "Coinbase", bundleId: "com.test", itunesId: "123" };
 
-  it("shows unranked when both overall and finance are null", () => {
-    expect(formatPositionText(app, { overall: null, finance: null })).toBe(
-      "Coinbase: unranked",
-    );
-  });
-
-  it("shows both ranks when both are present", () => {
-    expect(formatPositionText(app, { overall: 35, finance: 12 })).toBe(
-      "Coinbase: #35 overall · #12 Finance",
-    );
-  });
-
-  it("shows only finance when overall is null", () => {
-    expect(formatPositionText(app, { overall: null, finance: 128 })).toBe(
-      "Coinbase: #128 Finance",
-    );
-  });
-
-  it("shows only overall when finance is null", () => {
-    expect(formatPositionText(app, { overall: 50, finance: null })).toBe(
-      "Coinbase: #50 overall",
-    );
+  it("formats finance rank without category label", () => {
+    expect(formatFinancePositionText(app, 12)).toBe("Coinbase: #12");
   });
 
   it("uses app name in output", () => {
     const poly = { name: "Polymarket", bundleId: "com.poly", itunesId: "456" };
-    expect(formatPositionText(poly, { overall: null, finance: 80 })).toBe(
-      "Polymarket: #80 Finance",
-    );
+    expect(formatFinancePositionText(poly, 80)).toBe("Polymarket: #80");
+  });
+});
+
+describe("formatOverallPositionText", () => {
+  const app = { name: "Coinbase", bundleId: "com.test", itunesId: "123" };
+
+  it("formats overall rank without category label", () => {
+    expect(formatOverallPositionText(app, 35)).toBe("Coinbase: #35");
+  });
+
+  it("uses app name in output", () => {
+    const poly = { name: "Polymarket", bundleId: "com.poly", itunesId: "456" };
+    expect(formatOverallPositionText(poly, 50)).toBe("Polymarket: #50");
   });
 });
 
