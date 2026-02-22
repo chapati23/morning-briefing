@@ -10,7 +10,7 @@ export interface DataSource {
   readonly name: string;
   readonly priority: number; // Lower = higher in briefing
   readonly timeoutMs?: number; // Override default timeout for slow sources
-  fetch(date: Date): Promise<BriefingSection>;
+  fetch(date: Date): Promise<BriefingSection | BriefingSection[]>;
 }
 
 export interface BriefingSection {
@@ -29,6 +29,7 @@ export interface BriefingItem {
   readonly calendarUrl?: string; // GCS URL for calendar ICS download
   readonly sentiment?: Sentiment;
   readonly monospace?: boolean; // Render text in fixed-width font (for alignment)
+  readonly sentimentPrefix?: boolean; // Place sentiment emoji before the text (default: after)
 }
 
 export type Sentiment = "positive" | "negative" | "neutral";

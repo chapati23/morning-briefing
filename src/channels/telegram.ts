@@ -138,11 +138,9 @@ export const formatSection = (section: BriefingSection): string => {
       if (label && value && item.url) {
         const escapedLabel = escapeMarkdown(`${label}: `);
         const formattedValue = `\`${escapeMarkdownInCode(value)}\``;
-        const linkContent = sentiment
-          ? `${formattedValue} ${sentiment}`
-          : formattedValue;
-        line = `${indent}${bullet} ${timePrefix}${escapedLabel}[${linkContent}](${escapeUrlForMarkdown(item.url)})`;
-        // Sentiment is already included in the link, don't add it again
+        const sentimentPrefix = sentiment ? `${sentiment} ` : "";
+        line = `${indent}${bullet} ${sentimentPrefix}${timePrefix}${escapedLabel}[${formattedValue}](${escapeUrlForMarkdown(item.url)})`;
+        // Sentiment is already included as a prefix, don't add it again
       } else {
         // Regular items: link the whole text
         if (item.monospace) {
@@ -154,10 +152,13 @@ export const formatSection = (section: BriefingSection): string => {
             ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
             : formatTextWithMonospace(text);
 
-          line = `${indent}${bullet} ${timePrefix}${formattedText}`;
-
-          if (sentiment) {
-            line += ` ${sentiment}`;
+          if (item.sentimentPrefix && sentiment) {
+            line = `${indent}${bullet} ${sentiment} ${timePrefix}${formattedText}`;
+          } else {
+            line = `${indent}${bullet} ${timePrefix}${formattedText}`;
+            if (sentiment) {
+              line += ` ${sentiment}`;
+            }
           }
         }
       }
