@@ -34,7 +34,40 @@ gh pr create --base main --title "..." --body "..."
 | `fix/` | Bug fixes |
 | `chore/` | Docs, deps, config, refactoring |
 
+## Conflict Resolution: Rebase-Only
+
+When a branch falls behind `main`, **always rebase — never merge**:
+
+```bash
+# ❌ Never do this — creates a merge commit that breaks GitHub's rebase button
+git merge origin/main
+
+# ✅ Always do this
+git fetch origin
+git rebase origin/main
+```
+
+After rebasing, force-push the branch:
+
+```bash
+git push --force-with-lease origin <branch>
+```
+
+(`--force-with-lease` aborts safely if someone else pushed to the branch in the meantime.)
+
+## Force Push Policy
+
+| Branch | Force push? |
+| --- | --- |
+| `main` | ❌ Never |
+| Feature branch, after rebase | ✅ Use `--force-with-lease` |
+
+## PR Merge Strategy
+
+Always use **"Rebase and merge"** on GitHub. Never "Create a merge commit".
+
 ## Why
 
 CI deploys on push to `main`. Unreviewed changes go straight to production.
 PRs give a chance to catch issues before they affect the daily briefing.
+Linear history makes `git log` readable and bisecting easy.
