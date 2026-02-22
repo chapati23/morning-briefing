@@ -363,7 +363,7 @@ const buildFinanceItems = (
     return [
       {
         rank: ranking.finance,
-        item: { text, sentiment: getSentiment(trends) },
+        item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
       },
     ];
   })
@@ -400,7 +400,7 @@ const buildOverallItems = (
     return [
       {
         rank: ranking.overall,
-        item: { text, sentiment: getSentiment(trends) },
+        item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
       },
     ];
   })

@@ -152,10 +152,13 @@ export const formatSection = (section: BriefingSection): string => {
             ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
             : formatTextWithMonospace(text);
 
-          line = `${indent}${bullet} ${timePrefix}${formattedText}`;
-
-          if (sentiment) {
-            line += ` ${sentiment}`;
+          if (item.sentimentPrefix && sentiment) {
+            line = `${indent}${bullet} ${sentiment} ${timePrefix}${formattedText}`;
+          } else {
+            line = `${indent}${bullet} ${timePrefix}${formattedText}`;
+            if (sentiment) {
+              line += ` ${sentiment}`;
+            }
           }
         }
       }

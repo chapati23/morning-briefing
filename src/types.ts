@@ -29,6 +29,7 @@ export interface BriefingItem {
   readonly calendarUrl?: string; // GCS URL for calendar ICS download
   readonly sentiment?: Sentiment;
   readonly monospace?: boolean; // Render text in fixed-width font (for alignment)
+  readonly sentimentPrefix?: boolean; // Place sentiment emoji before the text (default: after)
 }
 
 export type Sentiment = "positive" | "negative" | "neutral";
