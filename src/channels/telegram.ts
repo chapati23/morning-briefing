@@ -174,7 +174,10 @@ export const formatSection = (section: BriefingSection): string => {
       for (const detailLine of detailLines) {
         lines.push(`${indent}_${escapeMarkdown(detailLine)}_`);
       }
-      // Add blank line after detailed items for visual separation
+    }
+
+    // Blank line after detailed items or items that explicitly request padding
+    if (item.detail || item.paddingAfter) {
       lines.push("");
     }
   }

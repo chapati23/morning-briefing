@@ -30,6 +30,7 @@ export interface BriefingItem {
   readonly sentiment?: Sentiment;
   readonly monospace?: boolean; // Render text in fixed-width font (for alignment)
   readonly sentimentPrefix?: boolean; // Place sentiment emoji before the text (default: after)
+  readonly paddingAfter?: boolean; // Always add a blank line after this item (even without detail)
 }
 
 export type Sentiment = "positive" | "negative" | "neutral";
