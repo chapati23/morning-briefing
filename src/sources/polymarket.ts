@@ -463,17 +463,10 @@ const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
     detail += `\n${implStr}`;
   }
 
-  // For multi-market events, use the top outcome's change for sentiment
-  // (since that's what we display). For binary, use the market's change.
-  const sentimentChange =
-    market.isMultiMarket && market.topOutcomes?.[0]
-      ? market.topOutcomes[0].change
-      : market.oneDayPriceChange;
-
   return {
     text: truncate(market.title, 70),
     url: market.url,
-    sentiment: sentimentChange >= 0 ? "positive" : "negative",
+    sentiment: "neutral",
     detail,
   };
 };
