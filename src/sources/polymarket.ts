@@ -466,7 +466,6 @@ const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
   return {
     text: truncate(market.title, 70),
     url: market.url,
-    sentiment: "neutral",
     detail,
   };
 };
@@ -507,7 +506,6 @@ const formatTopMarketItem = (market: ClassifiedMarket): BriefingItem => {
     text: truncate(market.title, 70),
     detail,
     url: market.url,
-    sentiment: "neutral",
   };
 };
 
