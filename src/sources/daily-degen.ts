@@ -282,6 +282,7 @@ const toBriefingItem = (item: ParsedNewsItem): BriefingItem => ({
   text: item.text,
   url: item.tweetUrl,
   detail: item.attribution,
+  paddingAfter: true,
 });
 
 /**
