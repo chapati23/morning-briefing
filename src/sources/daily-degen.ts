@@ -56,6 +56,8 @@ const SKIP_PATTERNS: readonly RegExp[] = [
   /\bedition of @/i,
   // "Recent interview with X from Y just published yesterday"
   /^recent interview/i,
+  // "A video version of @patfscott's article..."
+  /\bvideo version\b/i,
   // Catch-all: any item that's essentially "go watch/listen to this content"
   /\b(?:aired|published|dropped)\s+\d+\s+hours?\s+ago/i,
   /\b(?:aired|published|dropped)\s+one\s+hour\s+ago/i,

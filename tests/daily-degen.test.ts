@@ -168,6 +168,11 @@ describe("shouldSkipItem", () => {
         "Another new @coinbureau video, on the Bitcoin mining sector:",
       ),
     ).toBe(true);
+    expect(
+      shouldSkipItem(
+        "A video version of @patfscott's article that went viral on 'The Mog Economy'",
+      ),
+    ).toBe(true);
   });
 
   it("skips roundtable items", () => {
