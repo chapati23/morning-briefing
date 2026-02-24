@@ -109,6 +109,19 @@ export const runBriefing = async (
     nonEmptySections.push(failureSection);
   }
 
+  // Add a section for failed sources so they're visible in the briefing
+  if (failures.length > 0) {
+    const failureSection: BriefingSection = {
+      title: "⚠️ Source Failures",
+      icon: "⚠️",
+      items: failures.map((f) => ({
+        text: `${f.source}: ${f.error}`,
+        sentiment: "negative" as const,
+      })),
+    };
+    nonEmptySections.push(failureSection);
+  }
+
   // Sort sections by priority (lower = higher in briefing)
   // Use startsWith to match titles that include additional info (e.g., "ETF Flows from Fri, Jan 30")
   const sortedSections = [...nonEmptySections].sort((a, b) => {
