@@ -317,9 +317,50 @@ export const parseVoyages = (pageText: string): readonly Voyage[] => {
 // ============================================================================
 
 const fetchVoyages = async (): Promise<readonly Voyage[]> => {
-  const apiKey = process.env["AGENTMAIL_API_KEY"]?.trim();
+  const rawKey = process.env["AGENTMAIL_API_KEY"];
+  const apiKey = rawKey?.trim();
+  const hasApiKey = Boolean(apiKey);
+  const apiKeyLength = apiKey?.length ?? 0;
+  const emailAddr = process.env["AGENTMAIL_EMAIL_ADDRESS"]?.trim();
+  const hasEmailAddress = Boolean(emailAddr);
+  const emailAddressLength = emailAddr?.length ?? 0;
+  // #region agent log
+  fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Debug-Session-Id": "07314d",
+    },
+    body: JSON.stringify({
+      sessionId: "07314d",
+      location: "opensea-voyages.ts:fetchVoyages",
+      message: "env check",
+      data: { hasApiKey, apiKeyLength, hasEmailAddress, emailAddressLength },
+      timestamp: Date.now(),
+      hypothesisId: "H1-H2",
+    }),
+  }).catch(() => {});
+  // #endregion
   if (!apiKey) {
-    throw new Error("AGENTMAIL_API_KEY not configured");
+    const errMsg = "AGENTMAIL_API_KEY not configured";
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "07314d",
+      },
+      body: JSON.stringify({
+        sessionId: "07314d",
+        location: "opensea-voyages.ts:fetchVoyages",
+        message: "throw: key not configured",
+        data: { error: errMsg },
+        timestamp: Date.now(),
+        hypothesisId: "H1",
+      }),
+    }).catch(() => {});
+    // #endregion
+    throw new Error(errMsg);
   }
 
   const mail = new AgentMailClient({ apiKey });
@@ -494,6 +535,23 @@ const fetchVoyages = async (): Promise<readonly Voyage[]> => {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     log(`Error: ${message}`);
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "07314d",
+      },
+      body: JSON.stringify({
+        sessionId: "07314d",
+        location: "opensea-voyages.ts:fetchVoyages:catch",
+        message: "opensea voyage error",
+        data: { errorMessage: message },
+        timestamp: Date.now(),
+        hypothesisId: "H3-H5",
+      }),
+    }).catch(() => {});
+    // #endregion
     throw error;
   } finally {
     if (browser) {
@@ -513,7 +571,28 @@ export const openSeaVoyagesSource: DataSource = {
   timeoutMs: 150_000, // Email OTP flow (~60s) + browser/navigation (~60s) + retry buffer
 
   fetch: async (): Promise<BriefingSection> => {
-    if (!process.env["AGENTMAIL_API_KEY"]?.trim()) {
+    const rawKey = process.env["AGENTMAIL_API_KEY"];
+    const hasKey = Boolean(rawKey?.trim());
+    const keyLen = rawKey?.trim().length ?? 0;
+    const hasEmail = Boolean(process.env["AGENTMAIL_EMAIL_ADDRESS"]?.trim());
+    // #region agent log
+    fetch("http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Debug-Session-Id": "07314d",
+      },
+      body: JSON.stringify({
+        sessionId: "07314d",
+        location: "opensea-voyages.ts:openSeaVoyagesSource.fetch",
+        message: "fetch entry env",
+        data: { hasKey, keyLen, hasEmail },
+        timestamp: Date.now(),
+        hypothesisId: "H1-H4",
+      }),
+    }).catch(() => {});
+    // #endregion
+    if (!rawKey?.trim()) {
       throw new Error("AGENTMAIL_API_KEY not configured");
     }
 
