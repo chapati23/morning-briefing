@@ -72,6 +72,26 @@ export const runBriefing = async (
           : String(result.reason);
       console.error(`[orchestrator] ✗ ${source.name} failed: ${errorMessage}`);
       failures.push({ source: source.name, error: errorMessage });
+      // #region agent log
+      fetch(
+        "http://127.0.0.1:7243/ingest/d6ee0ffd-8589-4f61-9fea-0e32c75a8eff",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Debug-Session-Id": "07314d",
+          },
+          body: JSON.stringify({
+            sessionId: "07314d",
+            location: "orchestrator.ts:source failure",
+            message: "source failed",
+            data: { sourceName: source.name, errorMessage },
+            timestamp: Date.now(),
+            hypothesisId: "H5",
+          }),
+        },
+      ).catch(() => {});
+      // #endregion
     }
   });
 
