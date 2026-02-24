@@ -42,7 +42,14 @@ const parseCliArgs = (args: string[]) => {
       }
       default: {
         if ((arg === "--source" || arg === "-s") && args[i + 1]) {
-          values["source"] = args[++i] ?? "";
+          const parts: string[] = [];
+          let next = args[i + 1];
+          while (next !== undefined && !next.startsWith("-")) {
+            i += 1;
+            parts.push(args[i] ?? "");
+            next = args[i + 1];
+          }
+          values["source"] = parts.join(" ");
         } else if (arg === "--date" && args[i + 1]) {
           values["date"] = args[++i] ?? "";
         }

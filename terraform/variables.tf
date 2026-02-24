@@ -43,11 +43,21 @@ variable "agentmail_api_key" {
   description = "AgentMail API key for OpenSea Voyages email-based OTP login (from https://console.agentmail.to)"
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(trimspace(var.agentmail_api_key)) > 0
+    error_message = "agentmail_api_key must be non-empty. Set AGENTMAIL_API_KEY in .env.local and run 'make apply' from terraform/."
+  }
 }
 
 variable "agentmail_email_address" {
   description = "AgentMail inbox address for OpenSea OTP emails"
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.agentmail_email_address)) > 0
+    error_message = "agentmail_email_address must be non-empty. Set AGENTMAIL_EMAIL_ADDRESS in .env.local and run 'make apply' from terraform/."
+  }
 }
 
 variable "artifact_registry_kms_key_id" {
