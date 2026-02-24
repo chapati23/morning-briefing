@@ -526,8 +526,35 @@ const fetchVoyages = async (): Promise<readonly Voyage[]> => {
       await new Promise((resolve) => setTimeout(resolve, 15_000));
     }
 
+    // Step 8b: Wait for voyage content to render (prod can be slower than local)
+    const VOYAGE_CONTENT_WAIT_MS = 30_000;
+    const VOYAGE_POLL_MS = 2_000;
+    const voyageContentReady = await (async (): Promise<boolean> => {
+      const deadline = Date.now() + VOYAGE_CONTENT_WAIT_MS;
+      while (Date.now() < deadline) {
+        const text = await page.evaluate(
+          `(() => (document.body?.innerText ?? ""))()`,
+        );
+        if (
+          typeof text === "string" &&
+          text.toUpperCase().includes("ENDING IN")
+        ) {
+          log("Voyage content visible in page");
+          return true;
+        }
+        await new Promise((resolve) => setTimeout(resolve, VOYAGE_POLL_MS));
+      }
+      log("Voyage content wait timed out, reading page anyway");
+      return false;
+    })();
+
     // Step 9: Read the rewards page (we stayed on /rewards the entire time)
     bodyText = await getBodyText(page);
+
+    const hasEndingIn = bodyText.toUpperCase().includes("ENDING IN");
+    log(
+      `Page text length=${bodyText.length} contains 'ENDING IN'=${hasEndingIn} voyageContentReady=${voyageContentReady}`,
+    );
 
     const voyages = parseVoyages(bodyText);
     log(`Found ${voyages.length} voyages`);
