@@ -77,6 +77,17 @@ export const runBriefing = async (
 
   // Filter out sections with no items (e.g., conditional sources with nothing to report)
   const nonEmptySections = sections.filter((s) => s.items.length > 0);
+  if (failures.length > 0) {
+    const failureSection: BriefingSection = {
+      title: "⚠️ Source Failures",
+      icon: "⚠️",
+      items: failures.map((f) => ({
+        text: `${f.source}: ${f.error}`,
+        sentiment: "negative" as const,
+      })),
+    };
+    nonEmptySections.push(failureSection);
+  }
 
   // Sort sections by priority (lower = higher in briefing)
   // Use startsWith to match titles that include additional info (e.g., "ETF Flows from Fri, Jan 30")
