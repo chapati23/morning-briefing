@@ -254,7 +254,7 @@ const computeAppTrends = (
 // Formatting (exported for testing)
 // ============================================================================
 
-/** Format a rank number for display (e.g., "#35" or "unranked"). */
+/** Format a rank number for display (e.g., "#35" or "#101+"). */
 const formatRank = (rank: number | null): string =>
   rank === null ? "#101+" : `#${rank}`;
 
@@ -334,7 +334,7 @@ const computeOverallAppTrends = (
   ),
 });
 
-/** Build Finance-category BriefingItems — only apps ranked in Finance, sorted by rank. */
+/** Build Finance-category BriefingItems — all tracked apps, sorted by rank. */
 const buildFinanceItems = (
   snapshot: DailySnapshot,
   history: RankingsHistory,
@@ -348,6 +348,7 @@ const buildFinanceItems = (
   return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
 
+    // Include all apps — ranked or unranked (rank 101+)
     const rank = ranking.finance ?? 101;
     const trends = computeAppTrends(
       history,
