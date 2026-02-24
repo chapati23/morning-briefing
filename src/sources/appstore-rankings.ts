@@ -256,7 +256,7 @@ const computeAppTrends = (
 
 /** Format a rank number for display (e.g., "#35" or "unranked"). */
 const formatRank = (rank: number | null): string =>
-  rank === null ? "unranked" : `#${rank}`;
+  rank === null ? "#101+" : `#${rank}`;
 
 /** Format a single trend indicator (e.g., "↑5", "↓3", "NEW", "OUT", "—"). */
 export const formatTrendDelta = (trend: RankTrend): string => {
@@ -347,8 +347,8 @@ const buildFinanceItems = (
 
   return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
-    if (ranking.finance === null) return [];
 
+    const rank = ranking.finance ?? 101;
     const trends = computeAppTrends(
       history,
       ranking.finance,
@@ -357,12 +357,12 @@ const buildFinanceItems = (
     );
     const trendLine = formatTrendLine(trends);
     const text = trendLine
-      ? `${formatFinancePositionText(app, ranking.finance)} (${trendLine})`
-      : formatFinancePositionText(app, ranking.finance);
+      ? `${formatFinancePositionText(app, rank)} (${trendLine})`
+      : formatFinancePositionText(app, rank);
 
     return [
       {
-        rank: ranking.finance,
+        rank,
         item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
       },
     ];
