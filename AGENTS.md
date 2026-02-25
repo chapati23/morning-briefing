@@ -44,17 +44,21 @@ channels/telegram.ts (formatBriefingForTelegram)
 
 ### Sources (`src/sources/`)
 
-| File                        | What it fetches                                      |
-| --------------------------- | ---------------------------------------------------- |
-| `etf-flows.ts`              | BTC/ETH/SOL ETF flows from farside.co.uk (Puppeteer) |
-| `overnight-futures.ts`      | ES, NQ, GC, CL etc. from Yahoo Finance               |
-| `economic-calendar.ts`      | Week-ahead macro events                              |
-| `appstore-rankings.ts`      | iOS App Store Finance + Overall rankings             |
-| `daily-degen.ts`            | Crypto news digest                                   |
-| `polymarket.ts`             | Prediction market movements                          |
-| `opensea-voyages.ts`        | NFT voyage data                                      |
-| `tracked-apps.ts`           | Config: which apps to track in App Store             |
-| `fetch-current-rankings.ts` | Shared helper for appstore-rankings                  |
+| File                   | What it fetches                                      |
+| ---------------------- | ---------------------------------------------------- |
+| `etf-flows.ts`         | BTC/ETH/SOL ETF flows from farside.co.uk (Puppeteer) |
+| `overnight-futures.ts` | ES, NQ, GC, CL etc. from Yahoo Finance               |
+| `economic-calendar.ts` | Week-ahead macro events                              |
+| `appstore-rankings.ts` | iOS App Store Finance + Overall rankings             |
+| `daily-degen.ts`       | Crypto news digest                                   |
+| `polymarket.ts`        | Prediction market movements                          |
+| `congress-trades.ts`   | US Congress member stock trades from Capitol Trades  |
+
+> **Congress Trades has its own maintenance guide:** `docs/congress-trades-maintenance.md`
+> Read it before updating politician data, committee mappings, or scoring thresholds.
+> | `opensea-voyages.ts` | NFT voyage data |
+> | `tracked-apps.ts` | Config: which apps to track in App Store |
+> | `fetch-current-rankings.ts` | Shared helper for appstore-rankings |
 
 ---
 
@@ -177,6 +181,7 @@ See `.cursor/rules/post-change-checks.mdc` for the full decision tree.
 | `src/sources/polymarket.ts`        | `tests/polymarket.test.ts`        |
 | `src/sources/economic-calendar.ts` | `tests/economic-calendar.test.ts` |
 | `src/sources/daily-degen.ts`       | `tests/daily-degen.test.ts`       |
+| `src/sources/congress-trades.ts`   | `tests/congress-trades.test.ts`   |
 | `src/utils/cache.ts`               | `tests/cache.test.ts`             |
 | Multiple / integration             | `tests/e2e/briefing.test.ts`      |
 
