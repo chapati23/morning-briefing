@@ -9,6 +9,7 @@ import type {
   Briefing,
   BriefingSection,
   NotificationChannel,
+  Sentiment,
   TelegramConfig,
 } from "../types";
 
@@ -190,18 +191,22 @@ export const formatSection = (section: BriefingSection): string => {
   return lines.join("\n");
 };
 
-export const getSentimentEmoji = (
-  sentiment?: "positive" | "negative" | "neutral",
-): string => {
+export const getSentimentEmoji = (sentiment?: Sentiment): string => {
   switch (sentiment) {
-    case "positive": {
+    case "strong_positive": {
       return "🟢";
     }
-    case "negative": {
-      return "🔴";
+    case "positive": {
+      return "🟡";
     }
     case "neutral": {
       return "⚪";
+    }
+    case "negative": {
+      return "🟠";
+    }
+    case "strong_negative": {
+      return "🔴";
     }
     default: {
       return "";

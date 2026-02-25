@@ -221,7 +221,7 @@ export const buildFuturesItem = (
     const paddedPercent = formatPercent(changePercent).padStart(widths.percent);
     return {
       text: `${label} ${paddedPercent} / ${paddedPrice}`,
-      sentiment: getSentiment(changePercent),
+      sentiment: getSentiment(changePercent, contract.symbol),
       monospace: true,
     };
   }
@@ -249,10 +249,37 @@ export const formatPrice = (value: number): string =>
     maximumFractionDigits: 2,
   });
 
-export const getSentiment = (changePercent: number): Sentiment => {
-  if (changePercent > 0) return "positive";
-  if (changePercent < 0) return "negative";
-  return "neutral";
+/** Per-asset "big move" thresholds (in percent). Moves above this are strong_positive/strong_negative. */
+const BIG_MOVE_THRESHOLDS: Record<string, number> = {
+  "ES=F": 1, // S&P 500 — 1% is a big day
+  "NQ=F": 1.5, // Nasdaq — slightly more volatile
+  "GC=F": 1.5, // Gold
+  "SI=F": 2.5, // Silver — more volatile than gold
+  "HG=F": 2, // Copper
+  "CL=F": 3, // Crude Oil
+  "NG=F": 5, // Natural Gas — extremely volatile
+  "ZN=F": 0.5, // 10Y Treasury — very low vol
+  "DX-Y.NYB": 0.5, // Dollar Index — low vol
+  "6E=F": 0.7, // Euro FX
+};
+
+const FLAT_THRESHOLD = 0.05; // ±0.05% = flat
+
+export const getSentiment = (
+  changePercent: number,
+  symbol?: string,
+): Sentiment => {
+  const absChange = Math.abs(changePercent);
+
+  if (absChange <= FLAT_THRESHOLD) return "neutral";
+
+  const bigThreshold =
+    (symbol ? BIG_MOVE_THRESHOLDS[symbol] : undefined) ?? 1.5;
+
+  if (changePercent > 0) {
+    return absChange >= bigThreshold ? "strong_positive" : "positive";
+  }
+  return absChange >= bigThreshold ? "strong_negative" : "negative";
 };
 
 // ============================================================================
@@ -318,6 +345,11 @@ export const mockOvernightFuturesSource: DataSource = {
         {
           text: "EUR: -0.12% /      1.08",
           sentiment: "negative",
+          monospace: true,
+        },
+        {
+          text: "BTC: +5.23% / 98,765.00",
+          sentiment: "strong_positive",
           monospace: true,
         },
       ],

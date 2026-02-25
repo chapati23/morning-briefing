@@ -638,7 +638,6 @@ export const openSeaVoyagesSource: DataSource = {
         text: v.name,
         detail: v.description,
         url: OPENSEA_REWARDS_URL,
-        sentiment: "positive" as const,
       })),
       summary: `${voyages.length} voyage${voyages.length === 1 ? "" : "s"} available`,
     };
@@ -661,13 +660,11 @@ export const mockOpenSeaVoyagesSource: DataSource = {
         text: "Purchase any token on any chain ($50 USD Minimum)",
         detail: "EPIC · TOKEN SWAP · +250 XP · ENDING IN 2D",
         url: OPENSEA_REWARDS_URL,
-        sentiment: "positive",
       },
       {
         text: "Buy NFT from a verified Art collection on any chain ($10 minimum)",
         detail: "UNCOMMON · NFT PURCHASE · +100 XP · ENDING IN 1D",
         url: OPENSEA_REWARDS_URL,
-        sentiment: "positive",
       },
     ],
     summary: "2 voyages available",

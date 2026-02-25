@@ -33,7 +33,12 @@ export interface BriefingItem {
   readonly paddingAfter?: boolean; // Always add a blank line after this item (even without detail)
 }
 
-export type Sentiment = "positive" | "negative" | "neutral";
+export type Sentiment =
+  | "positive"
+  | "negative"
+  | "neutral"
+  | "strong_positive"
+  | "strong_negative";
 
 // ============================================================================
 // Briefing Output Types
