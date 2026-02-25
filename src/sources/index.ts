@@ -28,8 +28,10 @@ import {
 } from "./appstore-rankings";
 import {
   mockPolymarketMoversSource,
+  mockPolymarketOddsShiftsSource,
   mockPolymarketTopMarketsSource,
   polymarketMoversSource,
+  polymarketOddsShiftsSource,
   polymarketTopMarketsSource,
 } from "./polymarket";
 
@@ -44,6 +46,7 @@ const getRealSources = (): DataSource[] => [
   overnightFuturesSource,
   economicCalendarSource,
   polymarketMoversSource,
+  polymarketOddsShiftsSource,
   polymarketTopMarketsSource,
   appStoreRankingsSource,
   openSeaVoyagesSource,
@@ -55,6 +58,7 @@ const getMockSources = (): DataSource[] => [
   mockOvernightFuturesSource,
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
+  mockPolymarketOddsShiftsSource,
   mockPolymarketTopMarketsSource,
   mockAppStoreRankingsSource,
   mockOpenSeaVoyagesSource,

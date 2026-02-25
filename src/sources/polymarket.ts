@@ -13,6 +13,7 @@ import {
   type MarketImplication,
 } from "../config/polymarket-correlations";
 import type { BriefingItem, BriefingSection, DataSource } from "../types";
+import { isWeekend } from "./economic-calendar";
 
 const POLYMARKET_API = "https://gamma-api.polymarket.com";
 
@@ -31,6 +32,10 @@ const CONFIG = {
   // Output limits
   maxMovers: 5,
   maxTopMarkets: 5,
+  maxOddsShifts: 3,
+
+  // Minimum volume for odds shifts (filters out noise from tiny markets)
+  minOddsShiftVolume: 50_000,
 
   // API fetch limit
   fetchLimit: 200,
@@ -62,6 +67,8 @@ interface ParsedMarket {
   readonly url: string;
   readonly isMultiMarket: boolean;
   readonly topOutcomes?: readonly TopOutcome[];
+  /** Largest absolute 24h change across all outcomes (for multi-market events) */
+  readonly maxAbsDayChange: number;
 }
 
 interface ClassifiedMarket extends ParsedMarket {
@@ -130,12 +137,19 @@ export const polymarketMoversSource: DataSource = {
 
 /**
  * Polymarket Top Markets - High-volume markets to monitor.
+ * Weekend only — provides a big-picture overview of top markets by total volume.
+ * On weekdays, the Odds Shifts section replaces this with more actionable data.
  */
 export const polymarketTopMarketsSource: DataSource = {
   name: "Polymarket Top Markets",
   priority: 6, // After movers
 
-  fetch: async (): Promise<BriefingSection> => {
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Only show on weekends; weekdays get Odds Shifts instead
+    if (!isWeekend(date)) {
+      return { title: "Polymarket Top Markets", icon: "🎯", items: [] };
+    }
+
     const classified = await getClassifiedMarkets();
 
     const topMarkets = classified
@@ -155,6 +169,50 @@ export const polymarketTopMarketsSource: DataSource = {
       title: "Polymarket Top Markets",
       icon: "🎯",
       items: topMarkets.map(formatTopMarketItem),
+    };
+  },
+};
+
+/**
+ * Polymarket Odds Shifts - Markets with the biggest 24h probability changes.
+ * Weekday only — surfaces the top 3 markets by absolute odds movement,
+ * filtered to ≥$50K volume to avoid noise from tiny markets.
+ * On weekends, Top Markets replaces this with a big-picture view.
+ */
+export const polymarketOddsShiftsSource: DataSource = {
+  name: "Polymarket Odds Shifts",
+  priority: 5.5, // Between movers (5) and top markets (6)
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Only show on weekdays; weekends get Top Markets instead
+    if (isWeekend(date)) {
+      return { title: "Polymarket Odds Shifts", icon: "🔀", items: [] };
+    }
+
+    const classified = await getClassifiedMarkets();
+
+    const shifts = classified
+      // Exclude markets already shown as movers
+      .filter((m) => !m.isMover)
+      // Volume filter to avoid noise
+      .filter((m) => m.volume >= CONFIG.minOddsShiftVolume)
+      // Sort by biggest absolute 24h change (use maxAbsDayChange for multi-market events)
+      .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange)
+      .slice(0, CONFIG.maxOddsShifts);
+
+    const topShift = shifts[0];
+    if (shifts.length === 0 || !topShift || topShift.maxAbsDayChange < 0.01) {
+      return {
+        title: "Polymarket Odds Shifts",
+        icon: "🔀",
+        items: [{ text: "Quiet day — no significant odds shifts" }],
+      };
+    }
+
+    return {
+      title: "Polymarket Odds Shifts",
+      icon: "🔀",
+      items: shifts.map(formatOddsShiftItem),
     };
   },
 };
@@ -364,6 +422,14 @@ const parseMarket = (
         ? topOutcomes[0].probability
         : probability;
 
+    // Compute the maximum absolute 24h change across all outcomes
+    const maxAbsDayChange = isMultiMarket
+      ? Math.max(
+          ...event.markets.map((m) => Math.abs(m.oneDayPriceChange)),
+          Math.abs(market.oneDayPriceChange),
+        )
+      : Math.abs(market.oneDayPriceChange);
+
     return {
       id: market.id,
       // Use event title for display since URL points to event page
@@ -386,6 +452,7 @@ const parseMarket = (
       url: `https://polymarket.com/event/${event.slug}`,
       isMultiMarket,
       topOutcomes,
+      maxAbsDayChange,
     };
   } catch {
     return null;
@@ -509,6 +576,35 @@ const formatTopMarketItem = (market: ClassifiedMarket): BriefingItem => {
   };
 };
 
+const formatOddsShiftItem = (market: ClassifiedMarket): BriefingItem => {
+  const vol = formatVolume(market.volume);
+
+  let detail: string;
+
+  if (
+    market.isMultiMarket &&
+    market.topOutcomes &&
+    market.topOutcomes.length > 0
+  ) {
+    // Multi-market: show top 2 outcomes with their changes
+    const rankings = market.topOutcomes
+      .map((o, i) => `${i + 1}. ${formatOutcomeWithChange(o)}`)
+      .join("\n");
+    detail = `${rankings}\n${vol} volume`;
+  } else {
+    // Binary: show the odds shift
+    const dayChangePct = market.oneDayPriceChange * 100;
+    const sign = dayChangePct >= 0 ? "+" : "";
+    detail = `${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}pp 24h) | ${vol}`;
+  }
+
+  return {
+    text: truncate(market.title, 70),
+    url: market.url,
+    detail,
+  };
+};
+
 export const formatVolume = (volume: number): string => {
   if (volume >= 1_000_000) {
     return `$${(volume / 1_000_000).toFixed(1)}M`;
@@ -558,28 +654,64 @@ export const mockPolymarketTopMarketsSource: DataSource = {
   name: "Polymarket Top Markets",
   priority: 6,
 
-  fetch: async (): Promise<BriefingSection> => ({
-    title: "Polymarket Top Markets",
-    icon: "🎯",
-    items: [
-      {
-        text: "Democratic Presidential Nominee 2028",
-        detail: "1. Newsom — 33% (↓3%)\n2. AOC — 9% (↑2%)\n$586M volume",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/democratic-presidential-nominee-2028",
-      },
-      {
-        text: "Presidential Election Winner 2028",
-        detail: "1. Vance — 26%\n2. Newsom — 19%\n$245M volume",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/presidential-election-winner-2028",
-      },
-      {
-        text: "US recession in 2026",
-        detail: "28% | $8M | +5% 7d",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/us-recession-2026",
-      },
-    ],
-  }),
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Respect weekend-only behavior in mock too
+    if (!isWeekend(date)) {
+      return { title: "Polymarket Top Markets", icon: "🎯", items: [] };
+    }
+    return {
+      title: "Polymarket Top Markets",
+      icon: "🎯",
+      items: [
+        {
+          text: "Democratic Presidential Nominee 2028",
+          detail: "1. Newsom — 33% (↓3%)\n2. AOC — 9% (↑2%)\n$586M volume",
+          url: "https://polymarket.com/event/democratic-presidential-nominee-2028",
+        },
+        {
+          text: "Presidential Election Winner 2028",
+          detail: "1. Vance — 26%\n2. Newsom — 19%\n$245M volume",
+          url: "https://polymarket.com/event/presidential-election-winner-2028",
+        },
+        {
+          text: "US recession in 2026",
+          detail: "28% | $8M | +5% 7d",
+          url: "https://polymarket.com/event/us-recession-2026",
+        },
+      ],
+    };
+  },
+};
+
+export const mockPolymarketOddsShiftsSource: DataSource = {
+  name: "Polymarket Odds Shifts",
+  priority: 5.5,
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Respect weekday-only behavior in mock too
+    if (isWeekend(date)) {
+      return { title: "Polymarket Odds Shifts", icon: "🔀", items: [] };
+    }
+    return {
+      title: "Polymarket Odds Shifts",
+      icon: "🔀",
+      items: [
+        {
+          text: "Will the US enter a recession in 2026?",
+          detail: "34% (+6pp 24h) | $8.2M",
+          url: "https://polymarket.com/event/us-recession-2026",
+        },
+        {
+          text: "Next Fed rate cut by June 2026?",
+          detail: "72% (+4pp 24h) | $3.1M",
+          url: "https://polymarket.com/event/fed-rate-cut-june-2026",
+        },
+        {
+          text: "Trump tariffs on EU by April?",
+          detail: "58% (-3pp 24h) | $1.8M",
+          url: "https://polymarket.com/event/trump-eu-tariffs",
+        },
+      ],
+    };
+  },
 };
