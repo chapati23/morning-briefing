@@ -194,19 +194,19 @@ export const formatSection = (section: BriefingSection): string => {
 export const getSentimentEmoji = (sentiment?: Sentiment): string => {
   switch (sentiment) {
     case "strong_positive": {
-      return "🟢";
+      return "🚀";
     }
     case "positive": {
-      return "🟡";
+      return "🟢";
     }
     case "neutral": {
       return "⚪";
     }
     case "negative": {
-      return "🟠";
+      return "🔴";
     }
     case "strong_negative": {
-      return "🔴";
+      return "🚨";
     }
     default: {
       return "";
