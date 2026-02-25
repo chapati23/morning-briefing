@@ -1,0 +1,22 @@
+{
+  "Nancy Pelosi": { "tier": 3, "multiplier": 2 },
+  "Tommy Tuberville": { "tier": 3, "multiplier": 2 },
+  "Dan Crenshaw": { "tier": 3, "multiplier": 2 },
+  "Marjorie Taylor Greene": { "tier": 3, "multiplier": 2 },
+  "Michael McCaul": { "tier": 2, "multiplier": 2 },
+  "Josh Gottheimer": { "tier": 3, "multiplier": 2 },
+  "Mark Green": { "tier": 2, "multiplier": 2 },
+  "Ro Khanna": { "tier": 3, "multiplier": 2 },
+  "John Curtis": { "tier": 3, "multiplier": 2 },
+  "Mike Johnson": { "tier": 1, "multiplier": 3 },
+  "Chuck Schumer": { "tier": 1, "multiplier": 3 },
+  "Mitch McConnell": { "tier": 1, "multiplier": 3 },
+  "Hakeem Jeffries": { "tier": 1, "multiplier": 3 },
+  "John Thune": { "tier": 1, "multiplier": 3 },
+  "Jack Reed": { "tier": 2, "multiplier": 2 },
+  "Roger Wicker": { "tier": 2, "multiplier": 2 },
+  "Patrick McHenry": { "tier": 2, "multiplier": 2 },
+  "Sherrod Brown": { "tier": 2, "multiplier": 2 },
+  "Tim Scott": { "tier": 2, "multiplier": 2 },
+  "Mark Warner": { "tier": 2, "multiplier": 2 }
+}

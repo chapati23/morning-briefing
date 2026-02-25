@@ -29,6 +29,7 @@ lint:
       paths:
         - node_modules/**
         - dist/**
+        - tests/fixtures/**
 actions:
   disabled:
     - trunk-check-pre-push # Disabled in favor of trunk-check-all-pre-push

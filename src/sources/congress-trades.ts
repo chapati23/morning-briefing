@@ -1,0 +1,376 @@
+/**
+ * Congress Trades Data Source
+ *
+ * Scrapes US Congress member stock trades from capitoltrades.com
+ * and surfaces significant trades using heuristic scoring.
+ */
+
+import * as cheerio from "cheerio";
+import { backOff } from "exponential-backoff";
+import type { BriefingSection, DataSource } from "../types";
+import { withCache } from "../utils";
+import excludedTickers from "../data/excluded-tickers.json";
+import politicianTiers from "../data/congress-politicians.json";
+
+const CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades";
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface CongressTrade {
+  readonly politician: string;
+  readonly party: "D" | "R" | "I";
+  readonly chamber: "House" | "Senate";
+  readonly state: string;
+  readonly company: string;
+  readonly ticker: string;
+  readonly tradeDate: Date;
+  readonly disclosureDate: Date;
+  readonly filingLagDays: number;
+  readonly owner: string;
+  readonly type: "buy" | "sell";
+  readonly amountRange: string;
+  readonly amountLower: number;
+  readonly price: string;
+  readonly score: number;
+  readonly hot: boolean;
+}
+
+// ============================================================================
+// Amount Parsing
+// ============================================================================
+
+/**
+ * Parse Capitol Trades amount range strings into a numeric lower bound.
+ *
+ * Known formats: "1K–15K", "15K–50K", "50K–100K", "100K–250K",
+ * "250K–500K", "500K–1M", "1M–5M", "5M–25M", "25M–50M"
+ */
+export const parseAmountRange = (range: string): number => {
+  const cleaned = range.replace(/[$,\s]/g, "");
+  // Extract the lower bound (before the dash/en-dash)
+  const lowerStr = cleaned.split(/[–-]/)[0]?.trim();
+  if (!lowerStr) return 0;
+  return parseAmountValue(lowerStr);
+};
+
+export const parseAmountValue = (value: string): number => {
+  const cleaned = value.replace(/[$,\s]/g, "").toUpperCase();
+  if (cleaned.endsWith("M")) {
+    return Number.parseFloat(cleaned.replace("M", "")) * 1_000_000;
+  }
+  if (cleaned.endsWith("K")) {
+    return Number.parseFloat(cleaned.replace("K", "")) * 1_000;
+  }
+  const num = Number.parseFloat(cleaned);
+  return Number.isNaN(num) ? 0 : num;
+};
+
+/**
+ * Format an amount range for display: "100K–250K" → "$100,001 – $250,000"
+ */
+const formatAmountDisplay = (range: string): string => {
+  // Just pass through the raw range with $ prefix
+  return `$${range.replace(/–/g, " – $")}`;
+};
+
+// ============================================================================
+// Scoring
+// ============================================================================
+
+const getBaseAmountScore = (amountLower: number): number => {
+  if (amountLower >= 1_000_000) return 5;
+  if (amountLower >= 500_000) return 3;
+  if (amountLower >= 250_000) return 2;
+  if (amountLower >= 100_000) return 1;
+  return 0;
+};
+
+const getPoliticianMultiplier = (name: string): number => {
+  const entry = (
+    politicianTiers as Record<string, { tier: number; multiplier: number }>
+  )[name];
+  return entry?.multiplier ?? 1;
+};
+
+const getDirectionWeight = (type: "buy" | "sell"): number => {
+  return type === "sell" ? 1.5 : 1;
+};
+
+const getFreshnessModifier = (filingLagDays: number): number => {
+  if (filingLagDays <= 7) return 1.5;
+  if (filingLagDays > 30) return 0.5;
+  return 1;
+};
+
+export const calculateScore = (trade: {
+  amountLower: number;
+  politician: string;
+  type: "buy" | "sell";
+  filingLagDays: number;
+}): number => {
+  const base = getBaseAmountScore(trade.amountLower);
+  if (base === 0) return 0;
+  return (
+    base *
+    getPoliticianMultiplier(trade.politician) *
+    getDirectionWeight(trade.type) *
+    getFreshnessModifier(trade.filingLagDays)
+  );
+};
+
+// ============================================================================
+// HTML Parsing
+// ============================================================================
+
+const parseParty = (text: string): "D" | "R" | "I" => {
+  if (text.includes("Democrat")) return "D";
+  if (text.includes("Republican")) return "R";
+  return "I";
+};
+
+const parseChamber = (text: string): "House" | "Senate" => {
+  return text.includes("Senate") ? "Senate" : "House";
+};
+
+const parseTradeDate = (dateStr: string): Date => {
+  // Format: "10 Feb2026" → need to split properly
+  const match = dateStr.match(/(\d{1,2})\s*(\w{3})\s*(\d{4})/);
+  if (!match?.[1] || !match[2] || !match[3]) return new Date();
+  return new Date(`${match[2]} ${match[1]}, ${match[3]}`);
+};
+
+const parseDisclosureDate = (): Date => {
+  // The "Published" column has relative dates like "Yesterday", "2 days ago"
+  // or absolute dates. We'll approximate with today.
+  return new Date();
+};
+
+const parseFilingLag = (text: string): number => {
+  const match = text.match(/(\d+)/);
+  return match?.[1] ? Number.parseInt(match[1], 10) : 0;
+};
+
+const parseTradeType = (text: string): "buy" | "sell" => {
+  return text.toLowerCase().includes("buy") ? "buy" : "sell";
+};
+
+const cleanTicker = (ticker: string): string => {
+  // "HSY:US" → "HSY"
+  return ticker.split(":")[0]?.trim() ?? ticker;
+};
+
+export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
+  const $ = cheerio.load(html);
+  const trades: CongressTrade[] = [];
+
+  $("table tr")
+    .slice(1)
+    .each((_, row) => {
+      const cells = $(row).find("td");
+      if (cells.length < 9) return;
+
+      const politicianCell = $(cells[0]);
+      const issuerCell = $(cells[1]);
+
+      const politician =
+        politicianCell.find(".politician-name").text().trim() ||
+        politicianCell.find("a[href*=politicians]").text().trim();
+      if (!politician) return;
+
+      const partyText = politicianCell.find(".q-field.party").text().trim();
+      const chamberText = politicianCell.find(".q-field.chamber").text().trim();
+      const state = politicianCell.find("[class*=us-state]").text().trim();
+
+      const company = issuerCell.find(".issuer-name a").text().trim();
+      const rawTicker = issuerCell.find(".issuer-ticker").text().trim();
+      const ticker = cleanTicker(rawTicker);
+
+      const tradeDateText = $(cells[3]).text().trim();
+      const filingLagText = $(cells[4]).text().trim();
+      const owner = $(cells[5]).text().trim();
+      const typeText = $(cells[6]).text().trim();
+      const amountRange = $(cells[7]).text().trim();
+      const price = $(cells[8]).text().trim();
+
+      const tradeDate = parseTradeDate(tradeDateText);
+      const filingLagDays = parseFilingLag(filingLagText);
+      const type = parseTradeType(typeText);
+      const amountLower = parseAmountRange(amountRange);
+
+      const score = calculateScore({
+        amountLower,
+        politician,
+        type,
+        filingLagDays,
+      });
+
+      trades.push({
+        politician,
+        party: parseParty(partyText),
+        chamber: parseChamber(chamberText),
+        state,
+        company,
+        ticker,
+        tradeDate,
+        disclosureDate: parseDisclosureDate(),
+        filingLagDays,
+        owner,
+        type,
+        amountRange,
+        amountLower,
+        price,
+        score,
+        hot: score >= 6,
+      });
+    });
+
+  return trades;
+};
+
+// ============================================================================
+// Filtering
+// ============================================================================
+
+const excludedTickerSet = new Set(excludedTickers);
+
+export const filterTrades = (trades: CongressTrade[]): CongressTrade[] => {
+  return trades
+    .filter((t) => !excludedTickerSet.has(t.ticker))
+    .filter((t) => t.amountLower >= 100_000)
+    .filter((t) => t.score >= 3)
+    .sort((a, b) => b.score - a.score);
+};
+
+// ============================================================================
+// Formatting
+// ============================================================================
+
+const formatDate = (date: Date): string => {
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+};
+
+const formatPartyState = (trade: CongressTrade): string => {
+  return `${trade.party}-${trade.state}`;
+};
+
+const formatChamber = (chamber: "House" | "Senate"): string => {
+  return chamber === "Senate" ? "Sen." : "Rep.";
+};
+
+export const formatTradeItem = (
+  trade: CongressTrade,
+): { text: string; detail: string } => {
+  const prefix = trade.hot ? "🔥 " : "";
+  const action = trade.type === "buy" ? "purchased" : "sold";
+  const text = `${prefix}${formatChamber(trade.chamber)} ${trade.politician} (${formatPartyState(trade)}) ${action} ${trade.ticker}`;
+  const detail = `${formatAmountDisplay(trade.amountRange)} · traded ${formatDate(trade.tradeDate)} · filed ${formatDate(trade.disclosureDate)}`;
+  return { text, detail };
+};
+
+// ============================================================================
+// Data Source
+// ============================================================================
+
+const fetchCapitolTradesHTML = async (): Promise<string> => {
+  const response = await backOff(
+    () =>
+      fetch(CAPITOL_TRADES_URL, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        signal: AbortSignal.timeout(30_000),
+      }),
+    {
+      numOfAttempts: 3,
+      startingDelay: 1000,
+      timeMultiple: 2,
+      jitter: "full",
+      retry: (error: unknown, attemptNumber) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[congress-trades] Attempt ${attemptNumber} failed: ${message}. Retrying...`,
+        );
+        return true;
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Capitol Trades returned ${response.status}`);
+  }
+
+  return response.text();
+};
+
+export const congressTradesSource: DataSource = {
+  name: "Congress Trades",
+  priority: 6,
+  timeoutMs: 30_000,
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    const dateKey = date.toISOString().split("T")[0];
+    const cacheKey = `congress-trades-${dateKey}`;
+
+    try {
+      const html = await withCache(cacheKey, fetchCapitolTradesHTML, {
+        ttlMs: CACHE_TTL_MS,
+      });
+
+      const allTrades = parseCapitolTradesHTML(html);
+      console.log(
+        `[congress-trades] Parsed ${allTrades.length} trades, filtering...`,
+      );
+
+      const filtered = filterTrades(allTrades);
+      console.log(`[congress-trades] ${filtered.length} trades passed filters`);
+
+      return {
+        title: "Congress Trades",
+        icon: "🏛",
+        items: filtered.map((trade) => {
+          const { text, detail } = formatTradeItem(trade);
+          return { text, detail };
+        }),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[congress-trades] Failed to fetch: ${message}`);
+      return {
+        title: "Congress Trades",
+        icon: "🏛",
+        items: [],
+      };
+    }
+  },
+};
+
+// ============================================================================
+// Mock Data for Testing
+// ============================================================================
+
+export const mockCongressTradesSource: DataSource = {
+  name: "Congress Trades",
+  priority: 6,
+
+  fetch: async (): Promise<BriefingSection> => ({
+    title: "Congress Trades",
+    icon: "🏛",
+    items: [
+      {
+        text: "🔥 Rep. Nancy Pelosi (D-CA) purchased NVDA",
+        detail: "$1M – $5M · traded Jan 15 · filed Feb 20",
+      },
+      {
+        text: "Sen. Tommy Tuberville (R-AL) sold RTX",
+        detail: "$250K – $500K · traded Feb 1 · filed Feb 18",
+      },
+    ],
+  }),
+};
