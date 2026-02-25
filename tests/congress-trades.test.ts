@@ -23,6 +23,8 @@ import {
   parseDisclosureDate,
   type CongressTrade,
 } from "../src/sources/congress-trades";
+import politicianTiers from "../src/data/congress-politicians.json";
+import tickerSectors from "../src/data/ticker-sectors.json";
 
 // ============================================================================
 // Amount Parsing
@@ -643,13 +645,14 @@ describe("congressTradesSource health indicator", () => {
 // ============================================================================
 
 describe("getCommitteeRelevance", () => {
-  it("returns committee name when politician's committee overlaps with ticker sector", () => {
-    // Jack Reed is on Armed Services, RTX is defense
-    expect(getCommitteeRelevance("Jack Reed", "RTX")).toBe("Armed Services");
+  it("returns committee and tier when politician's committee overlaps with ticker sector", () => {
+    // Jack Reed is on Armed Services, RTX is defense (direct)
+    const result = getCommitteeRelevance("Jack Reed", "RTX");
+    expect(result).toEqual({ committee: "Armed Services", tier: "direct" });
   });
 
   it("returns null when no overlap", () => {
-    // Nancy Pelosi is on Financial Services, RTX is defense
+    // Nancy Pelosi has no committees, RTX is defense
     expect(getCommitteeRelevance("Nancy Pelosi", "RTX")).toBeNull();
   });
 
@@ -662,23 +665,36 @@ describe("getCommitteeRelevance", () => {
   });
 
   it("matches Financial Services committee with banking tickers", () => {
-    expect(getCommitteeRelevance("Nancy Pelosi", "JPM")).toBe(
-      "Financial Services",
-    );
-    expect(getCommitteeRelevance("Josh Gottheimer", "GS")).toBe(
-      "Financial Services",
-    );
+    expect(getCommitteeRelevance("Josh Gottheimer", "GS")).toEqual({
+      committee: "Financial Services",
+      tier: "direct",
+    });
   });
 
-  it("matches Intelligence committee with cybersecurity tickers", () => {
-    expect(getCommitteeRelevance("Tom Cotton", "PANW")).toBe("Intelligence");
-    expect(getCommitteeRelevance("Mark Warner", "CRWD")).toBe("Intelligence");
+  it("matches Intelligence committee with cybersecurity tickers (direct)", () => {
+    expect(getCommitteeRelevance("Tom Cotton", "PANW")).toEqual({
+      committee: "Intelligence",
+      tier: "direct",
+    });
+    expect(getCommitteeRelevance("Mark Warner", "CRWD")).toEqual({
+      committee: "Intelligence",
+      tier: "direct",
+    });
   });
 
   it("matches Energy & Commerce with energy tickers", () => {
-    expect(getCommitteeRelevance("Dan Crenshaw", "XOM")).toBe(
-      "Energy & Commerce",
-    );
+    expect(getCommitteeRelevance("Dan Crenshaw", "XOM")).toEqual({
+      committee: "Energy & Commerce",
+      tier: "direct",
+    });
+  });
+
+  it("returns tangential tier for tangential matches", () => {
+    // Intelligence has "tech" as tangential, NVDA is "tech"
+    expect(getCommitteeRelevance("Tom Cotton", "NVDA")).toEqual({
+      committee: "Intelligence",
+      tier: "tangential",
+    });
   });
 });
 
@@ -687,39 +703,58 @@ describe("getCommitteeRelevance", () => {
 // ============================================================================
 
 describe("expanded politician map", () => {
-  it("has at least 30 politicians", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/congress-politicians.json"),
-        "utf8",
-      ),
-    ) as Record<string, unknown>;
-    expect(Object.keys(data).length).toBeGreaterThanOrEqual(30);
+  it("has at least 25 politicians", () => {
+    // _lastReviewed is a metadata key, not a politician
+    const data = politicianTiers as unknown as Record<string, unknown>;
+    const politicians = Object.keys(data).filter((k) => !k.startsWith("_"));
+    expect(politicians.length).toBeGreaterThanOrEqual(25);
   });
 
   it("all entries have committees array", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/congress-politicians.json"),
-        "utf8",
-      ),
-    ) as Record<string, { committees?: string[] }>;
-    for (const [, entry] of Object.entries(data)) {
+    const data = politicianTiers as unknown as Record<
+      string,
+      { committees?: string[] }
+    >;
+    for (const [key, entry] of Object.entries(data)) {
+      if (key.startsWith("_")) continue;
       expect(Array.isArray(entry.committees)).toBe(true);
     }
   });
 
   it("spot-checks known politicians", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/congress-politicians.json"),
-        "utf8",
-      ),
-    ) as Record<string, { multiplier: number; chamber: string; party: string }>;
+    const data = politicianTiers as unknown as Record<
+      string,
+      { multiplier: number; chamber: string; party: string }
+    >;
     expect(data["Nancy Pelosi"]?.chamber).toBe("House");
     expect(data["Roger Wicker"]?.multiplier).toBe(2);
     expect(data["Tom Cotton"]?.party).toBe("R");
     expect(data["Mike Johnson"]?.multiplier).toBe(3);
+  });
+
+  it("does not include retired/resigned members", () => {
+    const data = politicianTiers as unknown as Record<string, unknown>;
+    expect(data["Patrick McHenry"]).toBeUndefined();
+    expect(data["Sherrod Brown"]).toBeUndefined();
+    expect(data["Cathy McMorris Rodgers"]).toBeUndefined();
+    expect(data["Mark Green"]).toBeUndefined();
+    expect(data["Marjorie Taylor Greene"]).toBeUndefined();
+  });
+
+  it("McConnell is no longer leadership tier", () => {
+    const data = politicianTiers as unknown as Record<
+      string,
+      { multiplier: number }
+    >;
+    expect(data["Mitch McConnell"]?.multiplier).toBe(1);
+  });
+
+  it("Pelosi has no committees", () => {
+    const data = politicianTiers as unknown as Record<
+      string,
+      { committees: string[] }
+    >;
+    expect(data["Nancy Pelosi"]?.committees).toEqual([]);
   });
 });
 
@@ -729,34 +764,19 @@ describe("expanded politician map", () => {
 
 describe("ticker-sector mapping", () => {
   it("has at least 50 tickers", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/ticker-sectors.json"),
-        "utf8",
-      ),
-    ) as Record<string, string>;
+    const data = tickerSectors as Record<string, string>;
     expect(Object.keys(data).length).toBeGreaterThanOrEqual(50);
   });
 
   it("maps defense tickers correctly", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/ticker-sectors.json"),
-        "utf8",
-      ),
-    ) as Record<string, string>;
+    const data = tickerSectors as Record<string, string>;
     expect(data["RTX"]).toBe("defense");
     expect(data["LMT"]).toBe("defense");
     expect(data["NOC"]).toBe("defense");
   });
 
   it("maps banking tickers correctly", () => {
-    const data = JSON.parse(
-      fs.readFileSync(
-        path.join(__dirname, "../src/data/ticker-sectors.json"),
-        "utf8",
-      ),
-    ) as Record<string, string>;
+    const data = tickerSectors as Record<string, string>;
     expect(data["JPM"]).toBe("banking");
     expect(data["GS"]).toBe("banking");
   });
@@ -817,8 +837,8 @@ describe("direction weighting with raw types", () => {
 // ============================================================================
 
 describe("committee relevance scoring", () => {
-  it("applies 2x multiplier for committee-relevant trade", () => {
-    // Jack Reed (Armed Services, multiplier=2) buying RTX (defense)
+  it("applies 2x multiplier for direct committee-relevant trade", () => {
+    // Jack Reed (Armed Services, multiplier=2) buying RTX (defense = direct)
     // base=2, politician=2, direction=1, freshness=1, committee=2
     const score = calculateScore({
       amountLower: 250_000,
@@ -828,6 +848,19 @@ describe("committee relevance scoring", () => {
       ticker: "RTX",
     });
     expect(score).toBe(8);
+  });
+
+  it("applies 1.5x multiplier for tangential committee-relevant trade", () => {
+    // Tom Cotton (Intelligence) buying NVDA (tech = tangential for Intelligence)
+    // base=2, politician=2, direction=1, freshness=1, committee=1.5
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Tom Cotton",
+      type: "buy",
+      filingLagDays: 15,
+      ticker: "NVDA",
+    });
+    expect(score).toBe(6);
   });
 
   it("does not apply committee multiplier for irrelevant trade", () => {
@@ -840,6 +873,18 @@ describe("committee relevance scoring", () => {
       ticker: "DIS",
     });
     expect(score).toBe(4);
+  });
+
+  it("accepts pre-computed committee relevance", () => {
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Jack Reed",
+      type: "buy",
+      filingLagDays: 15,
+      ticker: "RTX",
+      committeeRelevance: { committee: "Armed Services", tier: "direct" },
+    });
+    expect(score).toBe(8);
   });
 });
 
@@ -867,7 +912,10 @@ describe("committee context in formatting", () => {
     score: 8,
     hot: true,
     url: "https://www.capitoltrades.com/trades/123",
-    committeeRelevance: "Armed Services",
+    committeeRelevance: {
+      committee: "Armed Services",
+      tier: "direct" as const,
+    },
     ...overrides,
   });
 

@@ -1,8 +1,9 @@
 {
+  "_lastReviewed": "2026-02-25",
   "Nancy Pelosi": {
     "multiplier": 2,
-    "role": "Former Speaker",
-    "committees": ["Financial Services"],
+    "role": "Former Speaker (retiring 2027)",
+    "committees": [],
     "chamber": "House",
     "state": "CA",
     "party": "D"
@@ -23,17 +24,9 @@
     "state": "TX",
     "party": "R"
   },
-  "Marjorie Taylor Greene": {
-    "multiplier": 2,
-    "role": "Oversight Committee",
-    "committees": ["Oversight", "Homeland Security"],
-    "chamber": "House",
-    "state": "GA",
-    "party": "R"
-  },
   "Michael McCaul": {
     "multiplier": 2,
-    "role": "Foreign Affairs Chair",
+    "role": "Foreign Affairs Chair (retiring 2027)",
     "committees": ["Foreign Affairs", "Intelligence"],
     "chamber": "House",
     "state": "TX",
@@ -41,19 +34,11 @@
   },
   "Josh Gottheimer": {
     "multiplier": 2,
-    "role": "Financial Services",
+    "role": "Financial Services (running for governor)",
     "committees": ["Financial Services"],
     "chamber": "House",
     "state": "NJ",
     "party": "D"
-  },
-  "Mark Green": {
-    "multiplier": 2,
-    "role": "Armed Services",
-    "committees": ["Armed Services", "Homeland Security"],
-    "chamber": "House",
-    "state": "TN",
-    "party": "R"
   },
   "Ro Khanna": {
     "multiplier": 2,
@@ -65,8 +50,8 @@
   },
   "John Curtis": {
     "multiplier": 2,
-    "role": "Energy & Commerce",
-    "committees": ["Energy & Natural Resources"],
+    "role": "Commerce, Science & Transportation",
+    "committees": ["Commerce, Science & Transportation", "Foreign Affairs"],
     "chamber": "Senate",
     "state": "UT",
     "party": "R"
@@ -88,9 +73,9 @@
     "party": "D"
   },
   "Mitch McConnell": {
-    "multiplier": 3,
-    "role": "Senior Senator",
-    "committees": ["Appropriations"],
+    "multiplier": 1,
+    "role": "Rules Chair, Senior Senator (retiring 2027)",
+    "committees": ["Appropriations", "Agriculture"],
     "chamber": "Senate",
     "state": "KY",
     "party": "R"
@@ -175,14 +160,6 @@
     "state": "OK",
     "party": "R"
   },
-  "Cathy McMorris Rodgers": {
-    "multiplier": 2,
-    "role": "Former Energy & Commerce Chair",
-    "committees": ["Energy & Commerce"],
-    "chamber": "House",
-    "state": "WA",
-    "party": "R"
-  },
   "Shelley Moore Capito": {
     "multiplier": 2,
     "role": "Appropriations",
@@ -210,8 +187,8 @@
   "Cleo Fields": {
     "multiplier": 2,
     "role": "Active Trader",
-    "committees": ["Agriculture"],
-    "chamber": "Senate",
+    "committees": ["Financial Services"],
+    "chamber": "House",
     "state": "LA",
     "party": "D"
   },

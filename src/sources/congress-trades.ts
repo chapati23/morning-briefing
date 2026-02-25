@@ -13,6 +13,9 @@ import committeeSectors from "../data/committee-sectors.json";
 import excludedTickers from "../data/excluded-tickers.json";
 // Last reviewed: 2026-02-25
 import politicianTiers from "../data/congress-politicians.json";
+// TODO: ticker-sectors currently maps each ticker to a single sector string.
+// Some tickers span multiple sectors (e.g., NVDA → "tech" + "defense").
+// Future improvement: support string[] per ticker for multi-sector matching.
 import tickerSectors from "../data/ticker-sectors.json";
 
 const CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades";
@@ -41,7 +44,10 @@ export interface CongressTrade {
   readonly score: number;
   readonly hot: boolean;
   readonly url: string;
-  readonly committeeRelevance: string | null;
+  readonly committeeRelevance: {
+    committee: string;
+    tier: "direct" | "tangential";
+  } | null;
 }
 
 // ============================================================================
@@ -104,7 +110,11 @@ interface PoliticianEntry {
 }
 
 const getPoliticianEntry = (name: string): PoliticianEntry | undefined => {
-  return (politicianTiers as Record<string, PoliticianEntry>)[name];
+  const entry = (politicianTiers as Record<string, unknown>)[name];
+  if (entry && typeof entry === "object" && "multiplier" in entry) {
+    return entry as PoliticianEntry;
+  }
+  return undefined;
 };
 
 const getPoliticianMultiplier = (name: string): number => {
@@ -127,24 +137,43 @@ const getDirectionWeight = (type: "buy" | "sell", rawType?: string): number => {
   return type === "sell" ? 1.5 : 1;
 };
 
+interface CommitteeSectorEntry {
+  direct: string[];
+  tangential: string[];
+}
+
 /**
  * Check if a politician's committee assignments overlap with the sector
- * of the traded ticker. Returns the matching committee name or null.
+ * of the traded ticker. Returns an object with the matching committee name
+ * and relevance tier, or null if no match.
+ *
+ * NOTE: Uses first-match semantics — iterates committees in order and returns
+ * the first overlap found. A politician on multiple relevant committees will
+ * only surface the first match.
  */
 export const getCommitteeRelevance = (
   politician: string,
   ticker: string,
-): string | null => {
+): { committee: string; tier: "direct" | "tangential" } | null => {
   const entry = getPoliticianEntry(politician);
   if (!entry?.committees?.length) return null;
 
   const tickerSector = (tickerSectors as Record<string, string>)[ticker];
-  if (!tickerSector) return null;
+  if (!tickerSector) {
+    console.debug(`[congress-trades] No sector mapping for ticker: ${ticker}`);
+    return null;
+  }
 
   for (const committee of entry.committees) {
-    const sectors = (committeeSectors as Record<string, string[]>)[committee];
-    if (sectors?.includes(tickerSector)) {
-      return committee;
+    const sectors = (
+      committeeSectors as Record<string, CommitteeSectorEntry | string>
+    )[committee] as CommitteeSectorEntry | undefined;
+    if (!sectors || typeof sectors === "string") continue;
+    if (sectors.direct.includes(tickerSector)) {
+      return { committee, tier: "direct" };
+    }
+    if (sectors.tangential.includes(tickerSector)) {
+      return { committee, tier: "tangential" };
     }
   }
   return null;
@@ -163,13 +192,32 @@ export const calculateScore = (trade: {
   rawType?: string;
   filingLagDays: number;
   ticker?: string;
+  /** Pre-computed committee relevance to avoid redundant calculation. */
+  committeeRelevance?: {
+    committee: string;
+    tier: "direct" | "tangential";
+  } | null;
 }): number => {
   const base = getBaseAmountScore(trade.amountLower);
   if (base === 0) return 0;
-  const committeeMultiplier =
-    trade.ticker && getCommitteeRelevance(trade.politician, trade.ticker)
-      ? 2
-      : 1;
+
+  // Use pre-computed relevance if provided, otherwise compute on the fly
+  const relevance =
+    trade.committeeRelevance === undefined
+      ? trade.ticker
+        ? getCommitteeRelevance(trade.politician, trade.ticker)
+        : null
+      : trade.committeeRelevance;
+
+  // Direct oversight → 2x, tangential → 1.5x, no match → 1x
+  let committeeMultiplier = 1;
+  if (relevance) {
+    committeeMultiplier = relevance.tier === "direct" ? 2 : 1.5;
+    console.debug(
+      `[congress-trades] Sector relevance: ${trade.politician} (${relevance.committee}) traded ${trade.ticker} → ${committeeMultiplier}x boost`,
+    );
+  }
+
   return (
     base *
     getPoliticianMultiplier(trade.politician) *
@@ -324,6 +372,8 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
         const price = $(cells[8]).text().trim();
 
         // Extract trade detail URL from the row link
+        // NOTE: a[href*='/trades/'] is fragile — will break if Capitol Trades
+        // changes their URL structure. Monitor for 404s in scraped URLs.
         const rowLink =
           $(row).find("a[href*='/trades/']").attr("href") ??
           politicianCell.find("a[href*='/trades/']").attr("href") ??
@@ -344,6 +394,7 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
         const amountLower = parseAmountRange(amountRange);
         const committeeRelevance = getCommitteeRelevance(politician, ticker);
 
+        // Pass pre-computed relevance to avoid redundant calculation
         const score = calculateScore({
           amountLower,
           politician,
@@ -351,6 +402,7 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
           rawType: typeText,
           filingLagDays,
           ticker,
+          committeeRelevance,
         });
 
         trades.push({
@@ -433,7 +485,7 @@ export const formatTradeItem = (
   const action = trade.type === "buy" ? "purchased" : "sold";
   const text = `${prefix}${formatChamber(trade.chamber)} ${trade.politician} (${formatPartyState(trade)}) ${action} ${trade.ticker}`;
   const committeeLine = trade.committeeRelevance
-    ? `${trade.committeeRelevance} · `
+    ? `${trade.committeeRelevance.committee} · `
     : "";
   const detail = `${committeeLine}${formatAmountDisplay(trade.amountRange)} · traded ${formatDate(trade.tradeDate)} · filed ${formatDate(trade.disclosureDate)}`;
   return { text, detail, url: trade.url };
@@ -456,7 +508,10 @@ interface GroupedTrade {
   readonly hot: boolean;
   readonly trades: CongressTrade[];
   readonly url: string;
-  readonly committeeRelevance: string | null;
+  readonly committeeRelevance: {
+    committee: string;
+    tier: "direct" | "tangential";
+  } | null;
 }
 
 export const deduplicateTrades = (
@@ -536,7 +591,7 @@ export const formatDeduplicatedItem = (
   const action = entry.type === "buy" ? "purchased" : "sold";
   const text = `${prefix}${chamber} ${entry.politician} (${entry.party}-${entry.state}) ${action} ${entry.ticker} (${entry.count} trades, ${formatGroupedAmount(entry.trades)})`;
   const committeeLine = entry.committeeRelevance
-    ? `${entry.committeeRelevance} · `
+    ? `${entry.committeeRelevance.committee} · `
     : "";
   const detail = `${committeeLine}Combined from ${entry.count} transactions`;
   return { text, detail, url: entry.url };
