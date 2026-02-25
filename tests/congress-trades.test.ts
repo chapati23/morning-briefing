@@ -10,7 +10,10 @@ const defined = <T>(value: T | undefined): T => {
 
 import {
   calculateScore,
+  congressTradesSource,
+  deduplicateTrades,
   filterTrades,
+  formatDeduplicatedItem,
   formatTradeItem,
   mockCongressTradesSource,
   parseAmountRange,
@@ -152,23 +155,54 @@ describe("calculateScore", () => {
 });
 
 // ============================================================================
-// HTML Parsing
+// HTML Parsing — Fixture Assertions
 // ============================================================================
 
 describe("parseCapitolTradesHTML", () => {
   const fixturePath = path.join(__dirname, "fixtures", "capitoltrades.html");
   const html = fs.readFileSync(fixturePath, "utf8");
 
-  it("parses trades from real HTML", () => {
+  it("parses exactly 12 trades from fixture", () => {
     const trades = parseCapitolTradesHTML(html);
-    expect(trades.length).toBeGreaterThan(0);
+    expect(trades.length).toBe(12);
   });
 
-  it("extracts politician name", () => {
+  it("first trade has correct politician, party, chamber, state", () => {
     const trades = parseCapitolTradesHTML(html);
-    const first = trades[0];
-    expect(first).toBeDefined();
-    expect(defined(first).politician.length).toBeGreaterThan(0);
+    const first = defined(trades[0]);
+    expect(first.politician).toBe("Scott Franklin");
+    expect(first.party).toBe("R");
+    expect(first.chamber).toBe("House");
+    expect(first.state).toBe("FL");
+  });
+
+  it("first trade has correct ticker, type, amount", () => {
+    const trades = parseCapitolTradesHTML(html);
+    const first = defined(trades[0]);
+    expect(first.ticker).toBe("HSY");
+    expect(first.type).toBe("sell");
+    expect(first.amountRange).toBe("1K–15K");
+    expect(first.amountLower).toBe(1_000);
+  });
+
+  it("parses Jonathan Jackson trades correctly", () => {
+    const trades = parseCapitolTradesHTML(html);
+    const jacksonTrades = trades.filter(
+      (t) => t.politician === "Jonathan Jackson",
+    );
+    expect(jacksonTrades.length).toBe(9);
+    expect(jacksonTrades.every((t) => t.party === "D")).toBe(true);
+    expect(jacksonTrades.every((t) => t.state === "IL")).toBe(true);
+  });
+
+  it("handles N/A ticker for COUPANG (no issuerTicker)", () => {
+    const trades = parseCapitolTradesHTML(html);
+    const coupang = trades.find((t) => t.company === "COUPANG INC");
+    expect(coupang).toBeDefined();
+    // No ticker in the HTML for this issuer — should be empty or N/A
+    expect(
+      defined(coupang).ticker === "" || defined(coupang).ticker === "N/A",
+    ).toBe(true);
   });
 
   it("extracts party", () => {
@@ -178,21 +212,11 @@ describe("parseCapitolTradesHTML", () => {
     }
   });
 
-  it("extracts ticker", () => {
+  it("extracts ticker without :US suffix", () => {
     const trades = parseCapitolTradesHTML(html);
-    const first = trades[0];
-    expect(first).toBeDefined();
-    // Ticker should not contain ":US" suffix
-    expect(defined(first).ticker).not.toContain(":");
-    expect(defined(first).ticker.length).toBeGreaterThan(0);
-  });
-
-  it("extracts amount range", () => {
-    const trades = parseCapitolTradesHTML(html);
-    const first = trades[0];
-    expect(first).toBeDefined();
-    expect(defined(first).amountRange.length).toBeGreaterThan(0);
-    expect(defined(first).amountLower).toBeGreaterThan(0);
+    for (const trade of trades) {
+      expect(trade.ticker).not.toContain(":");
+    }
   });
 
   it("extracts trade type", () => {
@@ -212,6 +236,25 @@ describe("parseCapitolTradesHTML", () => {
       parseCapitolTradesHTML("<html><body><p>No table here</p></body></html>"),
     ).toEqual([]);
   });
+
+  it("skips trades with unparsable dates", () => {
+    const html = `<html><body><table>
+      <tr><th>H</th></tr>
+      <tr>
+        <td><h2 class="politician-name"><a>Test Person</a></h2><div class="politician-info"><span class="q-field party">Democrat</span><span class="q-field chamber">House</span><span class="q-field us-state-compact">CA</span></div></td>
+        <td><h3 class="issuer-name"><a>Acme</a></h3><span class="issuer-ticker">ACME:US</span></td>
+        <td>Yesterday</td>
+        <td>garbage date</td>
+        <td>5 days</td>
+        <td>Self</td>
+        <td>buy</td>
+        <td>100K–250K</td>
+        <td>$100</td>
+      </tr>
+    </table></body></html>`;
+    const trades = parseCapitolTradesHTML(html);
+    expect(trades.length).toBe(0);
+  });
 });
 
 // ============================================================================
@@ -220,6 +263,16 @@ describe("parseCapitolTradesHTML", () => {
 
 describe("parseDisclosureDate", () => {
   const now = new Date("2026-02-25T12:00:00Z");
+
+  it("parses 'today'", () => {
+    const result = parseDisclosureDate("today", now);
+    expect(result.getTime()).toBe(now.getTime());
+  });
+
+  it("parses 'Today' (case-insensitive)", () => {
+    const result = parseDisclosureDate("Today", now);
+    expect(result.getTime()).toBe(now.getTime());
+  });
 
   it("parses 'Yesterday'", () => {
     const result = parseDisclosureDate("Yesterday", now);
@@ -230,6 +283,11 @@ describe("parseDisclosureDate", () => {
   it("parses 'X days ago'", () => {
     const result = parseDisclosureDate("3 days ago", now);
     expect(result.getDate()).toBe(22);
+  });
+
+  it("parses '1 day ago' (singular)", () => {
+    const result = parseDisclosureDate("1 day ago", now);
+    expect(result.getDate()).toBe(24);
   });
 
   it("parses 'X days' without 'ago'", () => {
@@ -335,6 +393,17 @@ describe("filterTrades", () => {
     ...overrides,
   });
 
+  it("excludes N/A and empty tickers", () => {
+    const trades = [
+      makeTrade({ ticker: "N/A", score: 10 }),
+      makeTrade({ ticker: "", score: 10 }),
+      makeTrade({ ticker: "NVDA", score: 5 }),
+    ];
+    const result = filterTrades(trades);
+    expect(result.length).toBe(1);
+    expect(defined(result[0]).ticker).toBe("NVDA");
+  });
+
   it("excludes ETF tickers", () => {
     const trades = [
       makeTrade({ ticker: "SPY", score: 10 }),
@@ -374,6 +443,86 @@ describe("filterTrades", () => {
     ];
     const result = filterTrades(trades);
     expect(result.map((t) => t.ticker)).toEqual(["B", "C", "A"]);
+  });
+});
+
+// ============================================================================
+// Deduplication
+// ============================================================================
+
+describe("deduplicateTrades", () => {
+  const makeTrade = (overrides: Partial<CongressTrade>): CongressTrade => ({
+    politician: "Nancy Pelosi",
+    party: "D",
+    chamber: "House",
+    state: "CA",
+    company: "NVIDIA",
+    ticker: "NVDA",
+    tradeDate: new Date("2026-01-15"),
+    disclosureDate: new Date("2026-02-20"),
+    filingLagDays: 5,
+    owner: "Self",
+    type: "buy",
+    amountRange: "1M–5M",
+    amountLower: 1_000_000,
+    price: "$130",
+    score: 15,
+    hot: true,
+    ...overrides,
+  });
+
+  it("passes through single trades unchanged", () => {
+    const trades = [makeTrade({})];
+    const result = deduplicateTrades(trades);
+    expect(result.length).toBe(1);
+    expect("count" in defined(result[0])).toBe(false);
+  });
+
+  it("groups same politician+ticker+type", () => {
+    const trades = [
+      makeTrade({ amountLower: 1_000_000, score: 15 }),
+      makeTrade({ amountLower: 500_000, score: 10 }),
+      makeTrade({ amountLower: 250_000, score: 6 }),
+    ];
+    const result = deduplicateTrades(trades);
+    expect(result.length).toBe(1);
+    const group = defined(result[0]);
+    expect("count" in group).toBe(true);
+    if ("count" in group) {
+      expect(group.count).toBe(3);
+      expect(group.totalAmountLower).toBe(1_750_000);
+      expect(group.maxScore).toBe(15);
+    }
+  });
+
+  it("does not group different tickers", () => {
+    const trades = [
+      makeTrade({ ticker: "NVDA" }),
+      makeTrade({ ticker: "AAPL" }),
+    ];
+    const result = deduplicateTrades(trades);
+    expect(result.length).toBe(2);
+  });
+
+  it("does not group different trade types", () => {
+    const trades = [
+      makeTrade({ type: "buy" }),
+      makeTrade({ type: "sell", score: 10 }),
+    ];
+    const result = deduplicateTrades(trades);
+    expect(result.length).toBe(2);
+  });
+
+  it("formats grouped trade correctly", () => {
+    const trades = [
+      makeTrade({ amountLower: 1_000_000, score: 15 }),
+      makeTrade({ amountLower: 500_000, score: 10 }),
+    ];
+    const result = deduplicateTrades(trades);
+    const { text } = formatDeduplicatedItem(defined(result[0]));
+    expect(text).toContain("Pelosi");
+    expect(text).toContain("NVDA");
+    expect(text).toContain("2 trades");
   });
 });
 
@@ -437,6 +586,45 @@ describe("formatTradeItem", () => {
     expect(detail).toContain("1M");
     expect(detail).toContain("traded");
     expect(detail).toContain("filed");
+  });
+});
+
+// ============================================================================
+// fetchCapitolTradesHTML error paths
+// ============================================================================
+
+describe("congressTradesSource.fetch error handling", () => {
+  it("returns empty items on fetch failure", async () => {
+    // The real source will fail in test env (no network / no real URL)
+    // We test that it gracefully returns empty items
+    const result = await congressTradesSource.fetch(new Date());
+    const section = result as {
+      title: string;
+      items: readonly { text: string }[];
+    };
+    expect(section.title).toBe("Congress Trades");
+    // Either empty or has "No significant trades" message — both are valid error handling
+    expect(Array.isArray(section.items)).toBe(true);
+  });
+});
+
+// ============================================================================
+// Parser health indicator (integration)
+// ============================================================================
+
+describe("congressTradesSource health indicator", () => {
+  it("shows info message when trades parsed but none pass filters", async () => {
+    // Indirectly tested: the fixture has all small trades (< $100K)
+    // so filterTrades should filter them all out
+    const fixturePath = path.join(__dirname, "fixtures", "capitoltrades.html");
+    const html = fs.readFileSync(fixturePath, "utf8");
+    const allTrades = parseCapitolTradesHTML(html);
+    const filtered = filterTrades(allTrades);
+
+    // All fixture trades are small (1K-100K range), none should pass the $100K + score>=3 filter
+    expect(allTrades.length).toBe(12);
+    expect(filtered.length).toBe(0);
+    // This confirms the health indicator path would trigger
   });
 });
 

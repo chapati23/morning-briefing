@@ -10,6 +10,7 @@ import { backOff } from "exponential-backoff";
 import type { BriefingSection, DataSource } from "../types";
 import { withCache } from "../utils";
 import excludedTickers from "../data/excluded-tickers.json";
+// Last reviewed: 2026-02-25
 import politicianTiers from "../data/congress-politicians.json";
 
 const CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades";
@@ -69,7 +70,7 @@ export const parseAmountValue = (value: string): number => {
 };
 
 /**
- * Format an amount range for display: "100K–250K" → "$100,001 – $250,000"
+ * Format an amount range for display: "100K–250K" → "$100K – $250K"
  */
 const formatAmountDisplay = (range: string): string => {
   // Just pass through the raw range with $ prefix
@@ -90,7 +91,7 @@ const getBaseAmountScore = (amountLower: number): number => {
 
 const getPoliticianMultiplier = (name: string): number => {
   const entry = (
-    politicianTiers as Record<string, { tier: number; multiplier: number }>
+    politicianTiers as Record<string, { multiplier: number; role?: string }>
   )[name];
   return entry?.multiplier ?? 1;
 };
@@ -135,11 +136,21 @@ const parseChamber = (text: string): "House" | "Senate" => {
   return text.includes("Senate") ? "Senate" : "House";
 };
 
-const parseTradeDate = (dateStr: string): Date => {
+const parseTradeDate = (dateStr: string): Date | null => {
   // Format: "10 Feb2026" → need to split properly
   const match = dateStr.match(/(\d{1,2})\s*(\w{3})\s*(\d{4})/);
-  if (!match?.[1] || !match[2] || !match[3]) return new Date();
-  return new Date(`${match[2]} ${match[1]}, ${match[3]}`);
+  if (!match?.[1] || !match[2] || !match[3]) {
+    console.warn(
+      `[congress-trades] ⚠️ Could not parse trade date: "${dateStr}"`,
+    );
+    return null;
+  }
+  const parsed = new Date(`${match[2]} ${match[1]}, ${match[3]}`);
+  if (Number.isNaN(parsed.getTime())) {
+    console.warn(`[congress-trades] ⚠️ Invalid trade date: "${dateStr}"`);
+    return null;
+  }
+  return parsed;
 };
 
 export const parseDisclosureDate = (
@@ -147,6 +158,10 @@ export const parseDisclosureDate = (
   now: Date = new Date(),
 ): Date => {
   const trimmed = text.trim().toLowerCase();
+
+  if (trimmed === "today") {
+    return new Date(now);
+  }
 
   if (trimmed === "yesterday") {
     const d = new Date(now);
@@ -173,7 +188,20 @@ const parseFilingLag = (text: string): number => {
 };
 
 const parseTradeType = (text: string): "buy" | "sell" => {
-  return text.toLowerCase().includes("buy") ? "buy" : "sell";
+  const lower = text.toLowerCase().trim();
+  if (lower.includes("buy") || lower === "purchase") return "buy";
+  if (
+    lower.includes("sell") ||
+    lower === "sale" ||
+    lower === "exchange" ||
+    lower === "sale_full" ||
+    lower === "sale_partial"
+  )
+    return "sell";
+  console.warn(
+    `[congress-trades] ⚠️ Unknown trade type: "${text}", defaulting to "sell"`,
+  );
+  return "sell";
 };
 
 const cleanTicker = (ticker: string): string => {
@@ -239,6 +267,10 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
         const price = $(cells[8]).text().trim();
 
         const tradeDate = parseTradeDate(tradeDateText);
+        if (!tradeDate) {
+          skipped++;
+          return;
+        }
         const filingLagDays = parseFilingLag(filingLagText);
         const type = parseTradeType(typeText);
         const amountLower = parseAmountRange(amountRange);
@@ -297,6 +329,7 @@ const excludedTickerSet = new Set(excludedTickers);
 
 export const filterTrades = (trades: CongressTrade[]): CongressTrade[] => {
   return trades
+    .filter((t) => t.ticker && t.ticker !== "N/A")
     .filter((t) => !excludedTickerSet.has(t.ticker))
     .filter((t) => t.amountLower >= 100_000)
     .filter((t) => t.score >= 3)
@@ -326,6 +359,101 @@ export const formatTradeItem = (
   const action = trade.type === "buy" ? "purchased" : "sold";
   const text = `${prefix}${formatChamber(trade.chamber)} ${trade.politician} (${formatPartyState(trade)}) ${action} ${trade.ticker}`;
   const detail = `${formatAmountDisplay(trade.amountRange)} · traded ${formatDate(trade.tradeDate)} · filed ${formatDate(trade.disclosureDate)}`;
+  return { text, detail };
+};
+
+// ============================================================================
+// Deduplication
+// ============================================================================
+
+interface GroupedTrade {
+  readonly politician: string;
+  readonly party: "D" | "R" | "I";
+  readonly chamber: "House" | "Senate";
+  readonly state: string;
+  readonly ticker: string;
+  readonly type: "buy" | "sell";
+  readonly count: number;
+  readonly totalAmountLower: number;
+  readonly maxScore: number;
+  readonly hot: boolean;
+  readonly trades: CongressTrade[];
+}
+
+export const deduplicateTrades = (
+  trades: CongressTrade[],
+): (CongressTrade | GroupedTrade)[] => {
+  const groups = new Map<string, CongressTrade[]>();
+
+  for (const trade of trades) {
+    const key = `${trade.politician}|${trade.ticker}|${trade.type}`;
+    const group = groups.get(key);
+    if (group) {
+      group.push(trade);
+    } else {
+      groups.set(key, [trade]);
+    }
+  }
+
+  const result: (CongressTrade | GroupedTrade)[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      const single = group.at(0);
+      if (single) result.push(single);
+    } else {
+      const first = group.at(0);
+      if (!first) continue;
+      const totalAmountLower = group.reduce((sum, t) => sum + t.amountLower, 0);
+      const maxScore = Math.max(...group.map((t) => t.score));
+      result.push({
+        politician: first.politician,
+        party: first.party,
+        chamber: first.chamber,
+        state: first.state,
+        ticker: first.ticker,
+        type: first.type,
+        count: group.length,
+        totalAmountLower,
+        maxScore,
+        hot: maxScore >= 6,
+        trades: group,
+      });
+    }
+  }
+
+  return result.sort((a, b) => {
+    const scoreA = "maxScore" in a ? a.maxScore : a.score;
+    const scoreB = "maxScore" in b ? b.maxScore : b.score;
+    return scoreB - scoreA;
+  });
+};
+
+const formatGroupedAmount = (trades: CongressTrade[]): string => {
+  const amounts = trades.map((t) => t.amountLower).sort((a, b) => a - b);
+  const low = amounts.at(0);
+  const high = amounts.at(-1);
+  if (low === undefined || high === undefined)
+    return formatAmountDisplay(trades[0]?.amountRange ?? "");
+  if (low === high) return formatAmountDisplay(trades.at(0)?.amountRange ?? "");
+  return `$${formatCompactAmount(low)}–$${formatCompactAmount(high)} total`;
+};
+
+const formatCompactAmount = (amount: number): string => {
+  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(0)}M`;
+  if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}K`;
+  return String(amount);
+};
+
+export const formatDeduplicatedItem = (
+  entry: CongressTrade | GroupedTrade,
+): { text: string; detail: string } => {
+  if (!("count" in entry)) return formatTradeItem(entry);
+
+  const prefix = entry.hot ? "🔥 " : "";
+  const chamber = entry.chamber === "Senate" ? "Sen." : "Rep.";
+  const action = entry.type === "buy" ? "purchased" : "sold";
+  const text = `${prefix}${chamber} ${entry.politician} (${entry.party}-${entry.state}) ${action} ${entry.ticker} (${entry.count} trades, ${formatGroupedAmount(entry.trades)})`;
+  const detail = `Combined from ${entry.count} transactions`;
   return { text, detail };
 };
 
@@ -390,11 +518,26 @@ export const congressTradesSource: DataSource = {
       const filtered = filterTrades(allTrades);
       console.log(`[congress-trades] ${filtered.length} trades passed filters`);
 
+      if (filtered.length === 0 && allTrades.length > 0) {
+        return {
+          title: "Congress Trades",
+          icon: "🏛",
+          items: [
+            {
+              text: "No significant trades in the last 24h",
+              detail: `${allTrades.length} trades checked, none passed filters`,
+            },
+          ],
+        };
+      }
+
+      const deduplicated = deduplicateTrades(filtered);
+
       return {
         title: "Congress Trades",
         icon: "🏛",
-        items: filtered.map((trade) => {
-          const { text, detail } = formatTradeItem(trade);
+        items: deduplicated.map((entry) => {
+          const { text, detail } = formatDeduplicatedItem(entry);
           return { text, detail };
         }),
       };
