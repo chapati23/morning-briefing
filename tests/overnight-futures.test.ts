@@ -72,7 +72,7 @@ describe("formatPrice", () => {
 describe("getSentiment", () => {
   it("returns positive for small gains", () => {
     expect(getSentiment(0.45)).toBe("positive");
-    expect(getSentiment(0.1)).toBe("positive");
+    expect(getSentiment(0.2)).toBe("positive");
   });
 
   it("returns strong_positive for big gains", () => {
@@ -87,7 +87,7 @@ describe("getSentiment", () => {
 
   it("returns negative for small losses", () => {
     expect(getSentiment(-0.23)).toBe("negative");
-    expect(getSentiment(-0.1)).toBe("negative");
+    expect(getSentiment(-0.2)).toBe("negative");
   });
 
   it("returns strong_negative for big losses", () => {
@@ -95,11 +95,17 @@ describe("getSentiment", () => {
     expect(getSentiment(-1, "ES=F")).toBe("strong_negative");
   });
 
-  it("returns neutral for flat (within ±0.05%)", () => {
+  it("returns neutral for flat (within default ±0.1%)", () => {
     expect(getSentiment(0)).toBe("neutral");
-    expect(getSentiment(0.03)).toBe("neutral");
-    expect(getSentiment(-0.04)).toBe("neutral");
     expect(getSentiment(0.05)).toBe("neutral");
+    expect(getSentiment(-0.08)).toBe("neutral");
+    expect(getSentiment(0.1)).toBe("neutral"); // boundary = flat
+  });
+
+  it("returns neutral for flat with per-asset threshold", () => {
+    expect(getSentiment(0.4, "BTC=F")).toBe("neutral"); // BTC flat = 0.5
+    expect(getSentiment(-0.3, "NG=F")).toBe("neutral"); // NG flat = 0.5
+    expect(getSentiment(0.01, "ZN=F")).toBe("neutral"); // ZN flat = 0.02
   });
 });
 
