@@ -262,14 +262,14 @@ interface AssetThresholds {
 }
 
 const ASSET_THRESHOLDS: Record<string, AssetThresholds> = {
-  "BTC=F": { flat: 0.5, big: 5.0 }, // Bitcoin — volatile, 5% is a big day
-  "ES=F": { flat: 0.05, big: 1.0 }, // S&P 500 — 1% is a big day
+  "BTC=F": { flat: 0.5, big: 5 }, // Bitcoin — volatile, 5% is a big day
+  "ES=F": { flat: 0.05, big: 1 }, // S&P 500 — 1% is a big day
   "NQ=F": { flat: 0.1, big: 1.5 }, // Nasdaq — slightly more volatile
   "GC=F": { flat: 0.1, big: 1.5 }, // Gold
   "SI=F": { flat: 0.2, big: 2.5 }, // Silver — more volatile than gold
-  "HG=F": { flat: 0.15, big: 2.0 }, // Copper
-  "CL=F": { flat: 0.2, big: 3.0 }, // Crude Oil
-  "NG=F": { flat: 0.5, big: 5.0 }, // Natural Gas — extremely volatile
+  "HG=F": { flat: 0.15, big: 2 }, // Copper
+  "CL=F": { flat: 0.2, big: 3 }, // Crude Oil
+  "NG=F": { flat: 0.5, big: 5 }, // Natural Gas — extremely volatile
   "ZN=F": { flat: 0.02, big: 0.5 }, // 10Y Treasury — very low vol
   "DX-Y.NYB": { flat: 0.05, big: 0.5 }, // Dollar Index — low vol
   "6E=F": { flat: 0.05, big: 0.7 }, // Euro FX
