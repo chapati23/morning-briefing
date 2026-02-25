@@ -15,6 +15,7 @@ import {
   filterTrades,
   formatDeduplicatedItem,
   formatTradeItem,
+  getCommitteeRelevance,
   mockCongressTradesSource,
   parseAmountRange,
   parseAmountValue,
@@ -390,6 +391,9 @@ describe("filterTrades", () => {
     price: "$100",
     score: 5,
     hot: false,
+    rawType: "buy",
+    url: "",
+    committeeRelevance: null,
     ...overrides,
   });
 
@@ -468,6 +472,9 @@ describe("deduplicateTrades", () => {
     price: "$130",
     score: 15,
     hot: true,
+    rawType: "buy",
+    url: "",
+    committeeRelevance: null,
     ...overrides,
   });
 
@@ -548,6 +555,9 @@ describe("formatTradeItem", () => {
     price: "$130",
     score: 15,
     hot: true,
+    rawType: "buy",
+    url: "",
+    committeeRelevance: null,
     ...overrides,
   });
 
@@ -625,6 +635,255 @@ describe("congressTradesSource health indicator", () => {
     expect(allTrades.length).toBe(12);
     expect(filtered.length).toBe(0);
     // This confirms the health indicator path would trigger
+  });
+});
+
+// ============================================================================
+// Phase 2: Committee↔Sector Relevance
+// ============================================================================
+
+describe("getCommitteeRelevance", () => {
+  it("returns committee name when politician's committee overlaps with ticker sector", () => {
+    // Jack Reed is on Armed Services, RTX is defense
+    expect(getCommitteeRelevance("Jack Reed", "RTX")).toBe("Armed Services");
+  });
+
+  it("returns null when no overlap", () => {
+    // Nancy Pelosi is on Financial Services, RTX is defense
+    expect(getCommitteeRelevance("Nancy Pelosi", "RTX")).toBeNull();
+  });
+
+  it("returns null for unknown politicians", () => {
+    expect(getCommitteeRelevance("Unknown Person", "RTX")).toBeNull();
+  });
+
+  it("returns null for unknown tickers", () => {
+    expect(getCommitteeRelevance("Jack Reed", "UNKNOWN")).toBeNull();
+  });
+
+  it("matches Financial Services committee with banking tickers", () => {
+    expect(getCommitteeRelevance("Nancy Pelosi", "JPM")).toBe(
+      "Financial Services",
+    );
+    expect(getCommitteeRelevance("Josh Gottheimer", "GS")).toBe(
+      "Financial Services",
+    );
+  });
+
+  it("matches Intelligence committee with cybersecurity tickers", () => {
+    expect(getCommitteeRelevance("Tom Cotton", "PANW")).toBe("Intelligence");
+    expect(getCommitteeRelevance("Mark Warner", "CRWD")).toBe("Intelligence");
+  });
+
+  it("matches Energy & Commerce with energy tickers", () => {
+    expect(getCommitteeRelevance("Dan Crenshaw", "XOM")).toBe(
+      "Energy & Commerce",
+    );
+  });
+});
+
+// ============================================================================
+// Phase 2: Expanded Politician Map
+// ============================================================================
+
+describe("expanded politician map", () => {
+  it("has at least 30 politicians", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/congress-politicians.json"),
+        "utf8",
+      ),
+    ) as Record<string, unknown>;
+    expect(Object.keys(data).length).toBeGreaterThanOrEqual(30);
+  });
+
+  it("all entries have committees array", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/congress-politicians.json"),
+        "utf8",
+      ),
+    ) as Record<string, { committees?: string[] }>;
+    for (const [, entry] of Object.entries(data)) {
+      expect(Array.isArray(entry.committees)).toBe(true);
+    }
+  });
+
+  it("spot-checks known politicians", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/congress-politicians.json"),
+        "utf8",
+      ),
+    ) as Record<string, { multiplier: number; chamber: string; party: string }>;
+    expect(data["Nancy Pelosi"]?.chamber).toBe("House");
+    expect(data["Roger Wicker"]?.multiplier).toBe(2);
+    expect(data["Tom Cotton"]?.party).toBe("R");
+    expect(data["Mike Johnson"]?.multiplier).toBe(3);
+  });
+});
+
+// ============================================================================
+// Phase 2: Ticker-Sector Lookup
+// ============================================================================
+
+describe("ticker-sector mapping", () => {
+  it("has at least 50 tickers", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/ticker-sectors.json"),
+        "utf8",
+      ),
+    ) as Record<string, string>;
+    expect(Object.keys(data).length).toBeGreaterThanOrEqual(50);
+  });
+
+  it("maps defense tickers correctly", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/ticker-sectors.json"),
+        "utf8",
+      ),
+    ) as Record<string, string>;
+    expect(data["RTX"]).toBe("defense");
+    expect(data["LMT"]).toBe("defense");
+    expect(data["NOC"]).toBe("defense");
+  });
+
+  it("maps banking tickers correctly", () => {
+    const data = JSON.parse(
+      fs.readFileSync(
+        path.join(__dirname, "../src/data/ticker-sectors.json"),
+        "utf8",
+      ),
+    ) as Record<string, string>;
+    expect(data["JPM"]).toBe("banking");
+    expect(data["GS"]).toBe("banking");
+  });
+});
+
+// ============================================================================
+// Phase 2: Direction Weighting
+// ============================================================================
+
+describe("direction weighting with raw types", () => {
+  it("applies 1.75x for sale_full", () => {
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Unknown",
+      type: "sell",
+      rawType: "sale_full",
+      filingLagDays: 15,
+    });
+    // base=2, multiplier=1, direction=1.75, freshness=1
+    expect(score).toBe(3.5);
+  });
+
+  it("applies 1.25x for sale_partial", () => {
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Unknown",
+      type: "sell",
+      rawType: "sale_partial",
+      filingLagDays: 15,
+    });
+    expect(score).toBe(2.5);
+  });
+
+  it("applies 0.75x for exchange", () => {
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Unknown",
+      type: "sell",
+      rawType: "exchange",
+      filingLagDays: 15,
+    });
+    expect(score).toBe(1.5);
+  });
+
+  it("falls back to standard sell weight without rawType", () => {
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Unknown",
+      type: "sell",
+      filingLagDays: 15,
+    });
+    expect(score).toBe(3);
+  });
+});
+
+// ============================================================================
+// Phase 2: Committee Relevance in Scoring
+// ============================================================================
+
+describe("committee relevance scoring", () => {
+  it("applies 2x multiplier for committee-relevant trade", () => {
+    // Jack Reed (Armed Services, multiplier=2) buying RTX (defense)
+    // base=2, politician=2, direction=1, freshness=1, committee=2
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Jack Reed",
+      type: "buy",
+      filingLagDays: 15,
+      ticker: "RTX",
+    });
+    expect(score).toBe(8);
+  });
+
+  it("does not apply committee multiplier for irrelevant trade", () => {
+    // Jack Reed buying DIS (entertainment, not defense)
+    const score = calculateScore({
+      amountLower: 250_000,
+      politician: "Jack Reed",
+      type: "buy",
+      filingLagDays: 15,
+      ticker: "DIS",
+    });
+    expect(score).toBe(4);
+  });
+});
+
+// ============================================================================
+// Phase 2: Committee Context in Formatted Output
+// ============================================================================
+
+describe("committee context in formatting", () => {
+  const makeTrade = (overrides: Partial<CongressTrade>): CongressTrade => ({
+    politician: "Jack Reed",
+    party: "D",
+    chamber: "Senate",
+    state: "RI",
+    company: "Raytheon",
+    ticker: "RTX",
+    tradeDate: new Date("2026-02-01"),
+    disclosureDate: new Date("2026-02-18"),
+    filingLagDays: 17,
+    owner: "Self",
+    type: "buy",
+    rawType: "buy",
+    amountRange: "250K–500K",
+    amountLower: 250_000,
+    price: "$100",
+    score: 8,
+    hot: true,
+    url: "https://www.capitoltrades.com/trades/123",
+    committeeRelevance: "Armed Services",
+    ...overrides,
+  });
+
+  it("includes committee name in detail when relevant", () => {
+    const { detail } = formatTradeItem(makeTrade({}));
+    expect(detail).toContain("Armed Services");
+  });
+
+  it("does not include committee when null", () => {
+    const { detail } = formatTradeItem(makeTrade({ committeeRelevance: null }));
+    expect(detail).not.toContain("Armed Services");
+  });
+
+  it("includes url in formatted output", () => {
+    const { url } = formatTradeItem(makeTrade({}));
+    expect(url).toBe("https://www.capitoltrades.com/trades/123");
   });
 });
 
