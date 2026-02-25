@@ -27,6 +27,10 @@ import {
   mockAppStoreRankingsSource,
 } from "./appstore-rankings";
 import {
+  congressTradesSource,
+  mockCongressTradesSource,
+} from "./congress-trades";
+import {
   mockPolymarketMoversSource,
   mockPolymarketOddsShiftsSource,
   mockPolymarketTopMarketsSource,
@@ -50,6 +54,7 @@ const getRealSources = (): DataSource[] => [
   polymarketTopMarketsSource,
   appStoreRankingsSource,
   openSeaVoyagesSource,
+  congressTradesSource,
 ];
 
 const getMockSources = (): DataSource[] => [
@@ -62,6 +67,7 @@ const getMockSources = (): DataSource[] => [
   mockPolymarketTopMarketsSource,
   mockAppStoreRankingsSource,
   mockOpenSeaVoyagesSource,
+  mockCongressTradesSource,
 ];
 
 const ALL_SOURCES = (): DataSource[] => {
