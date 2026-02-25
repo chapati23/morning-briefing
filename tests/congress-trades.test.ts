@@ -958,3 +958,130 @@ describe("mockCongressTradesSource", () => {
     expect(mockCongressTradesSource.priority).toBe(6);
   });
 });
+
+// ============================================================================
+// Sanity Check: Real-World Fixture Snapshots
+// ============================================================================
+
+describe("sanity check: no significant trades (2026-02-25 default page)", () => {
+  const html = fs.readFileSync(
+    path.join(__dirname, "fixtures/capitoltrades-no-big-trades.html"),
+    "utf8",
+  );
+  const trades = parseCapitolTradesHTML(html);
+  const filtered = filterTrades(trades);
+
+  it("parses all 12 trades from the page", () => {
+    expect(trades.length).toBe(12);
+  });
+
+  it("filters out all trades (none are significant)", () => {
+    expect(filtered.length).toBe(0);
+  });
+
+  it("contains expected politicians", () => {
+    const names = [...new Set(trades.map((t) => t.politician))];
+    expect(names).toContain("Cleo Fields");
+    expect(names).toContain("Scott Franklin");
+    expect(names).toContain("Jonathan Jackson");
+  });
+
+  it("all trades are below $100K or score below threshold", () => {
+    for (const t of trades) {
+      expect(t.score).toBeLessThan(3);
+    }
+  });
+});
+
+describe("sanity check: big trades (Pelosi $1M+ trades, Jan 2026 disclosures)", () => {
+  const html = fs.readFileSync(
+    path.join(__dirname, "fixtures/capitoltrades-big-trades.html"),
+    "utf8",
+  );
+  const trades = parseCapitolTradesHTML(html);
+  const filtered = filterTrades(trades);
+
+  it("parses all 12 trades", () => {
+    expect(trades.length).toBe(12);
+  });
+
+  it("filters to 10 significant trades", () => {
+    expect(filtered.length).toBe(10);
+  });
+
+  it("all trades are by Nancy Pelosi", () => {
+    for (const t of trades) {
+      expect(t.politician).toBe("Nancy Pelosi");
+      expect(t.party).toBe("D");
+      expect(t.state).toBe("CA");
+    }
+  });
+
+  it("highest-scoring trades are $1M+ sells (score 15)", () => {
+    const megaTrades = filtered.filter((t) => t.score >= 15);
+    expect(megaTrades.length).toBeGreaterThanOrEqual(4);
+    for (const t of megaTrades) {
+      expect(t.hot).toBe(true);
+      expect(t.amountLower).toBeGreaterThanOrEqual(1_000_000);
+    }
+  });
+
+  it("includes expected tickers", () => {
+    const tickers = [...new Set(trades.map((t) => t.ticker))];
+    expect(tickers).toContain("GOOGL");
+    expect(tickers).toContain("AAPL");
+    expect(tickers).toContain("NVDA");
+    expect(tickers).toContain("AMZN");
+    expect(tickers).toContain("AB");
+  });
+
+  it("$5M–$25M AAPL sell scores 15 with 🔥", () => {
+    const appleSell = defined(
+      filtered.find(
+        (t) =>
+          t.ticker === "AAPL" &&
+          t.type === "sell" &&
+          t.amountRange === "5M–25M",
+      ),
+    );
+    expect(appleSell.score).toBe(15);
+    expect(appleSell.hot).toBe(true);
+  });
+
+  it("$250K–$500K buys surface but without 🔥", () => {
+    const midBuys = filtered.filter(
+      (t) => t.amountRange === "250K–500K" && t.type === "buy",
+    );
+    expect(midBuys.length).toBeGreaterThanOrEqual(1);
+    for (const t of midBuys) {
+      expect(t.score).toBe(4);
+      expect(t.hot).toBe(false);
+    }
+  });
+
+  it("$100K buys by Pelosi score 2 (below threshold, filtered out)", () => {
+    const smallBuys = trades.filter(
+      (t) =>
+        t.amountLower >= 100_000 && t.amountLower < 250_000 && t.type === "buy",
+    );
+    for (const t of smallBuys) {
+      expect(t.score).toBe(2);
+    }
+    // Verify they're NOT in the filtered list
+    for (const t of smallBuys) {
+      expect(filtered).not.toContain(t);
+    }
+  });
+
+  it("formatted output looks correct for 🔥 trade", () => {
+    const hot = defined(
+      filtered.find((t) => t.hot && t.ticker === "AAPL" && t.type === "sell"),
+    );
+    const { text, detail } = formatTradeItem(hot);
+    expect(text).toContain("🔥");
+    expect(text).toContain("Nancy Pelosi");
+    expect(text).toContain("sold");
+    expect(text).toContain("AAPL");
+    expect(detail).toContain("$5M – $25M");
+  });
+});
