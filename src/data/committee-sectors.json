@@ -1,0 +1,39 @@
+{
+  "Armed Services": ["defense", "aerospace", "military", "cybersecurity"],
+  "Financial Services": [
+    "banking",
+    "fintech",
+    "insurance",
+    "crypto",
+    "payments"
+  ],
+  "Banking": ["banking", "fintech", "insurance", "crypto", "payments"],
+  "Energy & Commerce": [
+    "energy",
+    "oil",
+    "gas",
+    "utilities",
+    "tech",
+    "telecom",
+    "pharma"
+  ],
+  "Energy & Natural Resources": ["energy", "oil", "gas", "utilities", "mining"],
+  "Intelligence": ["defense", "cybersecurity", "surveillance", "tech"],
+  "Judiciary": ["tech", "social media", "antitrust"],
+  "Ways & Means": ["banking", "insurance", "tax", "healthcare"],
+  "Appropriations": ["defense", "healthcare", "infrastructure"],
+  "Finance": ["banking", "insurance", "healthcare", "tax"],
+  "Foreign Affairs": ["defense", "aerospace", "semiconductors"],
+  "Oversight": ["tech", "government services"],
+  "Homeland Security": ["defense", "cybersecurity", "surveillance"],
+  "Agriculture": ["agriculture", "commodities"],
+  "Commerce, Science & Transportation": [
+    "tech",
+    "telecom",
+    "transportation",
+    "aerospace"
+  ],
+  "Veterans' Affairs": ["healthcare"],
+  "Small Business": [],
+  "Ethics": []
+}
