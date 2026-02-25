@@ -31,11 +31,11 @@ export const getEnabledChannels = (): readonly NotificationChannel[] => {
   return channels;
 };
 
-const getSentimentIcon = (
-  sentiment?: "positive" | "negative" | "neutral",
-): string => {
-  if (sentiment === "positive") return "🟢";
-  if (sentiment === "negative") return "🔴";
+const getSentimentIcon = (sentiment?: import("../types").Sentiment): string => {
+  if (sentiment === "strong_positive") return "🟢";
+  if (sentiment === "positive") return "🟡";
+  if (sentiment === "negative") return "🟠";
+  if (sentiment === "strong_negative") return "🔴";
   return "";
 };
 

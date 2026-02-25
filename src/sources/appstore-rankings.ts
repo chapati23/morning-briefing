@@ -256,7 +256,7 @@ const computeAppTrends = (
 
 /** Format a rank number for display (e.g., "#35" or "#101+"). */
 const formatRank = (rank: number | null): string =>
-  rank === null ? "#101+" : `#${rank}`;
+  rank === null ? "unranked" : `#${rank}`;
 
 /** Format a single trend indicator (e.g., "↑5", "↓3", "NEW", "OUT", "—"). */
 export const formatTrendDelta = (trend: RankTrend): string => {
@@ -341,15 +341,27 @@ const buildFinanceItems = (
   referenceDate: Date,
 ): readonly BriefingItem[] => {
   interface ItemWithRank {
-    readonly rank: number;
+    readonly rank: number | null;
     readonly item: BriefingItem;
   }
 
   return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
 
-    // Include all apps — ranked or unranked (rank 101+)
-    const rank = ranking.finance ?? 101;
+    // Include all apps — ranked or unranked
+    const rank = ranking.finance; // null = unranked
+
+    // For unranked apps, skip trend computation (meaningless) and sentiment
+    if (rank === null) {
+      const text = `${app.name}: ${formatRank(null)}`;
+      return [
+        {
+          rank,
+          item: { text, sentiment: undefined, sentimentPrefix: true },
+        },
+      ];
+    }
+
     const trends = computeAppTrends(
       history,
       ranking.finance,
@@ -368,7 +380,7 @@ const buildFinanceItems = (
       },
     ];
   })
-    .sort((a, b) => a.rank - b.rank)
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
     .map(({ item }) => item);
 };
 
@@ -485,10 +497,12 @@ export const mockAppStoreRankingsSource: DataSource = {
         {
           text: "Coinbase: #12 (↑5 daily · ↑12 weekly · ↑25 monthly)",
           sentiment: "positive",
+          sentimentPrefix: true,
         },
         {
-          text: "Polymarket: #128 (↓46 daily · ↓42 weekly)",
-          sentiment: "negative",
+          text: "Polymarket: unranked",
+          sentiment: undefined,
+          sentimentPrefix: true,
         },
       ],
     },

@@ -199,12 +199,20 @@ describe("formatTextWithMonospace", () => {
 // ============================================================================
 
 describe("getSentimentEmoji", () => {
-  it("returns green circle for positive", () => {
-    expect(getSentimentEmoji("positive")).toBe("🟢");
+  it("returns green circle for strong_positive", () => {
+    expect(getSentimentEmoji("strong_positive")).toBe("🟢");
   });
 
-  it("returns red circle for negative", () => {
-    expect(getSentimentEmoji("negative")).toBe("🔴");
+  it("returns yellow circle for positive", () => {
+    expect(getSentimentEmoji("positive")).toBe("🟡");
+  });
+
+  it("returns orange circle for negative", () => {
+    expect(getSentimentEmoji("negative")).toBe("🟠");
+  });
+
+  it("returns red circle for strong_negative", () => {
+    expect(getSentimentEmoji("strong_negative")).toBe("🔴");
   });
 
   it("returns ⚪ for neutral (flat/unchanged)", () => {
@@ -286,7 +294,7 @@ describe("formatSection", () => {
       items: [{ text: "Good news", sentiment: "positive" }],
     };
     const result = formatSection(section);
-    expect(result).toContain("🟢");
+    expect(result).toContain("🟡");
   });
 
   it("formats item with negative sentiment", () => {
@@ -296,7 +304,7 @@ describe("formatSection", () => {
       items: [{ text: "Bad news", sentiment: "negative" }],
     };
     const result = formatSection(section);
-    expect(result).toContain("🔴");
+    expect(result).toContain("🟠");
   });
 
   it("formats item with URL as linked title", () => {
@@ -324,7 +332,7 @@ describe("formatSection", () => {
     };
     const result = formatSection(section);
     // Emoji should be a left-side prefix, label unlinked, only value linked
-    expect(result).toContain("🟢 BTC ETFs:");
+    expect(result).toContain("🟡 BTC ETFs:");
     expect(result).toContain("[`+$145.2M`](https://farside.co.uk/btc/)");
     // Emoji should NOT be inside the link
     expect(result).not.toContain("[`+$145.2M` 🟢]");
