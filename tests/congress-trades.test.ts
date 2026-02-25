@@ -16,6 +16,7 @@ import {
   parseAmountRange,
   parseAmountValue,
   parseCapitolTradesHTML,
+  parseDisclosureDate,
   type CongressTrade,
 } from "../src/sources/congress-trades";
 
@@ -210,6 +211,102 @@ describe("parseCapitolTradesHTML", () => {
     expect(
       parseCapitolTradesHTML("<html><body><p>No table here</p></body></html>"),
     ).toEqual([]);
+  });
+});
+
+// ============================================================================
+// Disclosure Date Parsing
+// ============================================================================
+
+describe("parseDisclosureDate", () => {
+  const now = new Date("2026-02-25T12:00:00Z");
+
+  it("parses 'Yesterday'", () => {
+    const result = parseDisclosureDate("Yesterday", now);
+    expect(result.getDate()).toBe(24);
+    expect(result.getMonth()).toBe(1); // Feb
+  });
+
+  it("parses 'X days ago'", () => {
+    const result = parseDisclosureDate("3 days ago", now);
+    expect(result.getDate()).toBe(22);
+  });
+
+  it("parses 'X days' without 'ago'", () => {
+    const result = parseDisclosureDate("2 days", now);
+    expect(result.getDate()).toBe(23);
+  });
+
+  it("parses absolute dates", () => {
+    const result = parseDisclosureDate("Feb 10, 2026", now);
+    expect(result.getFullYear()).toBe(2026);
+    expect(result.getMonth()).toBe(1);
+    expect(result.getDate()).toBe(10);
+  });
+
+  it("falls back to now for unparsable text", () => {
+    const result = parseDisclosureDate("gibberish", now);
+    expect(result.getTime()).toBe(now.getTime());
+  });
+});
+
+// ============================================================================
+// Zero-trade canary & structure validation
+// ============================================================================
+
+describe("parseCapitolTradesHTML observability", () => {
+  it("warns on zero trades from large HTML (canary)", () => {
+    const warns: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (msg: unknown) => warns.push(String(msg));
+
+    try {
+      // Large HTML with a table but no valid data rows
+      const bigHtml = `<html><body><table><tr><th>Header</th></tr></table>${"x".repeat(2000)}</body></html>`;
+      const result = parseCapitolTradesHTML(bigHtml);
+      expect(result).toEqual([]);
+      expect(warns.some((w) => w.includes("possible parser breakage"))).toBe(
+        true,
+      );
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+
+  it("warns when no table found in large HTML", () => {
+    const warns: string[] = [];
+    const origWarn = console.warn;
+    console.warn = (msg: unknown) => warns.push(String(msg));
+
+    try {
+      const bigHtml = `<html><body><div>${"x".repeat(2000)}</div></body></html>`;
+      const result = parseCapitolTradesHTML(bigHtml);
+      expect(result).toEqual([]);
+      expect(
+        warns.some((w) => w.includes("Expected table structure not found")),
+      ).toBe(true);
+    } finally {
+      console.warn = origWarn;
+    }
+  });
+
+  it("logs skipped rows on parse errors", () => {
+    const logs: string[] = [];
+    const origLog = console.log;
+    console.log = (msg: unknown) => logs.push(String(msg));
+
+    try {
+      // Table with rows that have too few cells → skipped
+      const html = `<html><body><table>
+        <tr><th>H</th></tr>
+        <tr><td>only one cell</td></tr>
+        <tr><td>another</td></tr>
+      </table></body></html>`;
+      parseCapitolTradesHTML(html);
+      expect(logs.some((l) => l.includes("skipped 2 rows"))).toBe(true);
+    } finally {
+      console.log = origLog;
+    }
   });
 });
 
