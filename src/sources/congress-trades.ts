@@ -142,10 +142,29 @@ const parseTradeDate = (dateStr: string): Date => {
   return new Date(`${match[2]} ${match[1]}, ${match[3]}`);
 };
 
-const parseDisclosureDate = (): Date => {
-  // The "Published" column has relative dates like "Yesterday", "2 days ago"
-  // or absolute dates. We'll approximate with today.
-  return new Date();
+export const parseDisclosureDate = (
+  text: string,
+  now: Date = new Date(),
+): Date => {
+  const trimmed = text.trim().toLowerCase();
+
+  if (trimmed === "yesterday") {
+    const d = new Date(now);
+    d.setDate(d.getDate() - 1);
+    return d;
+  }
+
+  const daysAgoMatch = trimmed.match(/^(\d+)\s*days?\s*(ago)?$/);
+  if (daysAgoMatch?.[1]) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - Number.parseInt(daysAgoMatch[1], 10));
+    return d;
+  }
+
+  const parsed = new Date(text.trim());
+  if (!Number.isNaN(parsed.getTime())) return parsed;
+
+  return new Date(now);
 };
 
 const parseFilingLag = (text: string): number => {
@@ -166,66 +185,106 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
   const $ = cheerio.load(html);
   const trades: CongressTrade[] = [];
 
+  // Validate expected table structure
+  const table = $("table");
+  if (table.length === 0) {
+    if (html.length > 1000) {
+      console.warn(
+        `[congress-trades] ⚠️ Expected table structure not found — Capitol Trades may have changed layout`,
+      );
+    }
+    return trades;
+  }
+
+  let skipped = 0;
+
   $("table tr")
     .slice(1)
     .each((_, row) => {
-      const cells = $(row).find("td");
-      if (cells.length < 9) return;
+      try {
+        const cells = $(row).find("td");
+        if (cells.length < 9) {
+          skipped++;
+          return;
+        }
 
-      const politicianCell = $(cells[0]);
-      const issuerCell = $(cells[1]);
+        const politicianCell = $(cells[0]);
+        const issuerCell = $(cells[1]);
 
-      const politician =
-        politicianCell.find(".politician-name").text().trim() ||
-        politicianCell.find("a[href*=politicians]").text().trim();
-      if (!politician) return;
+        const politician =
+          politicianCell.find(".politician-name").text().trim() ||
+          politicianCell.find("a[href*=politicians]").text().trim();
+        if (!politician) {
+          skipped++;
+          return;
+        }
 
-      const partyText = politicianCell.find(".q-field.party").text().trim();
-      const chamberText = politicianCell.find(".q-field.chamber").text().trim();
-      const state = politicianCell.find("[class*=us-state]").text().trim();
+        const partyText = politicianCell.find(".q-field.party").text().trim();
+        const chamberText = politicianCell
+          .find(".q-field.chamber")
+          .text()
+          .trim();
+        const state = politicianCell.find("[class*=us-state]").text().trim();
 
-      const company = issuerCell.find(".issuer-name a").text().trim();
-      const rawTicker = issuerCell.find(".issuer-ticker").text().trim();
-      const ticker = cleanTicker(rawTicker);
+        const company = issuerCell.find(".issuer-name a").text().trim();
+        const rawTicker = issuerCell.find(".issuer-ticker").text().trim();
+        const ticker = cleanTicker(rawTicker);
 
-      const tradeDateText = $(cells[3]).text().trim();
-      const filingLagText = $(cells[4]).text().trim();
-      const owner = $(cells[5]).text().trim();
-      const typeText = $(cells[6]).text().trim();
-      const amountRange = $(cells[7]).text().trim();
-      const price = $(cells[8]).text().trim();
+        const disclosureDateText = $(cells[2]).text().trim();
+        const tradeDateText = $(cells[3]).text().trim();
+        const filingLagText = $(cells[4]).text().trim();
+        const owner = $(cells[5]).text().trim();
+        const typeText = $(cells[6]).text().trim();
+        const amountRange = $(cells[7]).text().trim();
+        const price = $(cells[8]).text().trim();
 
-      const tradeDate = parseTradeDate(tradeDateText);
-      const filingLagDays = parseFilingLag(filingLagText);
-      const type = parseTradeType(typeText);
-      const amountLower = parseAmountRange(amountRange);
+        const tradeDate = parseTradeDate(tradeDateText);
+        const filingLagDays = parseFilingLag(filingLagText);
+        const type = parseTradeType(typeText);
+        const amountLower = parseAmountRange(amountRange);
 
-      const score = calculateScore({
-        amountLower,
-        politician,
-        type,
-        filingLagDays,
-      });
+        const score = calculateScore({
+          amountLower,
+          politician,
+          type,
+          filingLagDays,
+        });
 
-      trades.push({
-        politician,
-        party: parseParty(partyText),
-        chamber: parseChamber(chamberText),
-        state,
-        company,
-        ticker,
-        tradeDate,
-        disclosureDate: parseDisclosureDate(),
-        filingLagDays,
-        owner,
-        type,
-        amountRange,
-        amountLower,
-        price,
-        score,
-        hot: score >= 6,
-      });
+        trades.push({
+          politician,
+          party: parseParty(partyText),
+          chamber: parseChamber(chamberText),
+          state,
+          company,
+          ticker,
+          tradeDate,
+          disclosureDate: parseDisclosureDate(disclosureDateText),
+          filingLagDays,
+          owner,
+          type,
+          amountRange,
+          amountLower,
+          price,
+          score,
+          hot: score >= 6,
+        });
+      } catch {
+        skipped++;
+      }
     });
+
+  if (skipped > 0) {
+    console.log(
+      `[congress-trades] Parsed ${trades.length} trades, skipped ${skipped} rows (parse errors)`,
+    );
+  }
+
+  // Zero-trade canary: non-empty HTML but no trades parsed
+  if (trades.length === 0 && html.length > 1000) {
+    console.warn(
+      `[congress-trades] ⚠️ Parsed 0 trades from ${html.length} bytes HTML — possible parser breakage`,
+    );
+  }
 
   return trades;
 };
