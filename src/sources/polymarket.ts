@@ -113,9 +113,7 @@ export const polymarketMoversSource: DataSource = {
 
     const movers = classified
       .filter((m) => m.isMover)
-      .sort(
-        (a, b) => Math.abs(b.oneDayPriceChange) - Math.abs(a.oneDayPriceChange),
-      )
+      .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange)
       .slice(0, CONFIG.maxMovers);
 
     if (movers.length === 0) {
@@ -372,20 +370,28 @@ export const extractOutcomeName = (question: string): string => {
  * Extract top outcomes from a multi-market event.
  */
 const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
-  const sorted = markets
-    .map((m) => ({
-      name: extractOutcomeName(m.question),
-      probability: m.lastTradePrice * 100,
-      change: m.oneDayPriceChange,
-    }))
-    // Filter out completely dead (0%) and fully resolved (100%) outcomes
+  const mapped = markets.map((m) => ({
+    name: extractOutcomeName(m.question),
+    probability: m.lastTradePrice * 100,
+    change: m.oneDayPriceChange,
+  }));
+
+  // Filter out completely dead (0%) and fully resolved (100%) outcomes
+  const filtered = mapped
     .filter((o) => o.probability > 0.5 && o.probability < 99.5)
     .sort((a, b) => b.probability - a.probability);
 
-  if (sorted.length === 0) return [];
+  if (filtered.length > 0) {
+    return filtered.slice(0, 2);
+  }
 
-  // Return top 2 outcomes
-  return sorted.slice(0, 2);
+  // Fallback: all outcomes are fully resolved (e.g. date-based market where event happened).
+  // Show the 2 highest-probability outcomes — these reveal WHEN the event occurred.
+  const fallback = mapped
+    .filter((o) => o.probability > 0 && o.probability < 100)
+    .sort((a, b) => b.probability - a.probability);
+
+  return fallback.slice(0, 2);
 };
 
 const parseMarket = (
@@ -464,7 +470,8 @@ const parseMarket = (
 // ============================================================================
 
 const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
-  const dayChange = Math.abs(market.oneDayPriceChange);
+  // For multi-market events, use the max change across all outcomes (not just the primary market)
+  const dayChange = market.maxAbsDayChange;
 
   // For daily briefing, focus on 24h changes (not hourly)
   // This avoids showing markets with large hour change but tiny day change
