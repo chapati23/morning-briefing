@@ -51,7 +51,7 @@ export interface TopOutcome {
   readonly change: number; // 24h change as decimal (0.10 = 10%)
 }
 
-interface ParsedMarket {
+export interface ParsedMarket {
   readonly id: string;
   readonly title: string;
   readonly slug: string;
@@ -71,7 +71,7 @@ interface ParsedMarket {
   readonly maxAbsDayChange: number;
 }
 
-interface ClassifiedMarket extends ParsedMarket {
+export interface ClassifiedMarket extends ParsedMarket {
   readonly isMover: boolean;
   readonly implications: readonly MarketImplication[];
 }
@@ -229,7 +229,7 @@ interface GammaEvent {
   markets: GammaMarket[];
 }
 
-interface GammaMarket {
+export interface GammaMarket {
   id: string;
   question: string;
   slug: string;
@@ -369,7 +369,7 @@ export const extractOutcomeName = (question: string): string => {
 /**
  * Extract top outcomes from a multi-market event.
  */
-const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
+export const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
   const mapped = markets.map((m) => ({
     name: extractOutcomeName(m.question),
     probability: m.lastTradePrice * 100,
@@ -469,7 +469,7 @@ const parseMarket = (
 // Classification
 // ============================================================================
 
-const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
+export const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
   // For multi-market events, use the max change across all outcomes (not just the primary market)
   const dayChange = market.maxAbsDayChange;
 
