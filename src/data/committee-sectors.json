@@ -1,0 +1,76 @@
+{
+  "Armed Services": {
+    "direct": ["defense", "aerospace", "military"],
+    "tangential": ["cybersecurity"]
+  },
+  "Financial Services": {
+    "direct": ["banking", "fintech", "insurance", "crypto", "payments"],
+    "tangential": []
+  },
+  "Banking": {
+    "direct": ["banking", "fintech", "insurance", "crypto", "payments"],
+    "tangential": []
+  },
+  "Energy & Commerce": {
+    "direct": ["energy", "oil", "gas", "utilities", "telecom"],
+    "tangential": []
+  },
+  "Energy & Natural Resources": {
+    "direct": ["energy", "oil", "gas", "utilities", "mining"],
+    "tangential": []
+  },
+  "Intelligence": {
+    "direct": ["defense", "cybersecurity", "surveillance"],
+    "tangential": ["tech"]
+  },
+  "Judiciary": {
+    "direct": ["social media", "antitrust"],
+    "tangential": ["tech"]
+  },
+  "Ways & Means": {
+    "direct": ["banking", "insurance", "tax"],
+    "tangential": ["healthcare"]
+  },
+  "Appropriations": {
+    "direct": ["defense"],
+    "tangential": ["healthcare", "infrastructure"]
+  },
+  "Finance": {
+    "direct": ["banking", "insurance", "tax"],
+    "tangential": ["healthcare"]
+  },
+  "Foreign Affairs": {
+    "direct": ["defense", "aerospace"],
+    "tangential": ["semiconductors"]
+  },
+  "Oversight": {
+    "direct": ["government services"],
+    "tangential": ["tech"]
+  },
+  "Homeland Security": {
+    "direct": ["defense", "cybersecurity", "surveillance"],
+    "tangential": []
+  },
+  "Agriculture": {
+    "direct": ["agriculture", "commodities"],
+    "tangential": []
+  },
+  "Commerce, Science & Transportation": {
+    "direct": ["tech", "telecom", "transportation"],
+    "tangential": ["aerospace"]
+  },
+  "Veterans' Affairs": {
+    "direct": ["healthcare"],
+    "tangential": []
+  },
+  "_comment:Small Business": "Intentionally empty — no direct sector oversight",
+  "Small Business": {
+    "direct": [],
+    "tangential": []
+  },
+  "_comment:Ethics": "Intentionally empty — no direct sector oversight",
+  "Ethics": {
+    "direct": [],
+    "tangential": []
+  }
+}

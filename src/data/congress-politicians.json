@@ -1,22 +1,219 @@
 {
-  "Nancy Pelosi": { "multiplier": 2, "role": "Former Speaker" },
-  "Tommy Tuberville": { "multiplier": 2, "role": "Banking Committee" },
-  "Dan Crenshaw": { "multiplier": 2, "role": "Energy & Commerce" },
-  "Marjorie Taylor Greene": { "multiplier": 2, "role": "Oversight Committee" },
-  "Michael McCaul": { "multiplier": 2, "role": "Foreign Affairs Chair" },
-  "Josh Gottheimer": { "multiplier": 2, "role": "Financial Services" },
-  "Mark Green": { "multiplier": 2, "role": "Armed Services" },
-  "Ro Khanna": { "multiplier": 2, "role": "Armed Services" },
-  "John Curtis": { "multiplier": 2, "role": "Energy & Commerce" },
-  "Mike Johnson": { "multiplier": 3, "role": "Speaker of the House" },
-  "Chuck Schumer": { "multiplier": 3, "role": "Senate Majority Leader" },
-  "Mitch McConnell": { "multiplier": 3, "role": "Senate Minority Leader" },
-  "Hakeem Jeffries": { "multiplier": 3, "role": "House Minority Leader" },
-  "John Thune": { "multiplier": 3, "role": "Senate Majority Whip" },
-  "Jack Reed": { "multiplier": 2, "role": "Armed Services Chair" },
-  "Roger Wicker": { "multiplier": 2, "role": "Armed Services Ranking" },
-  "Patrick McHenry": { "multiplier": 2, "role": "Financial Services Chair" },
-  "Sherrod Brown": { "multiplier": 2, "role": "Banking Chair" },
-  "Tim Scott": { "multiplier": 2, "role": "Banking Ranking" },
-  "Mark Warner": { "multiplier": 2, "role": "Intelligence Chair" }
+  "_lastReviewed": "2026-02-25",
+  "Nancy Pelosi": {
+    "multiplier": 2,
+    "role": "Former Speaker (retiring 2027)",
+    "committees": [],
+    "chamber": "House",
+    "state": "CA",
+    "party": "D"
+  },
+  "Tommy Tuberville": {
+    "multiplier": 2,
+    "role": "Banking Committee",
+    "committees": ["Banking", "Armed Services"],
+    "chamber": "Senate",
+    "state": "AL",
+    "party": "R"
+  },
+  "Dan Crenshaw": {
+    "multiplier": 2,
+    "role": "Energy & Commerce",
+    "committees": ["Energy & Commerce"],
+    "chamber": "House",
+    "state": "TX",
+    "party": "R"
+  },
+  "Michael McCaul": {
+    "multiplier": 2,
+    "role": "Foreign Affairs Chair (retiring 2027)",
+    "committees": ["Foreign Affairs", "Intelligence"],
+    "chamber": "House",
+    "state": "TX",
+    "party": "R"
+  },
+  "Josh Gottheimer": {
+    "multiplier": 2,
+    "role": "Financial Services (running for governor)",
+    "committees": ["Financial Services"],
+    "chamber": "House",
+    "state": "NJ",
+    "party": "D"
+  },
+  "Ro Khanna": {
+    "multiplier": 2,
+    "role": "Armed Services",
+    "committees": ["Armed Services", "Oversight"],
+    "chamber": "House",
+    "state": "CA",
+    "party": "D"
+  },
+  "John Curtis": {
+    "multiplier": 2,
+    "role": "Commerce, Science & Transportation",
+    "committees": ["Commerce, Science & Transportation", "Foreign Affairs"],
+    "chamber": "Senate",
+    "state": "UT",
+    "party": "R"
+  },
+  "Mike Johnson": {
+    "multiplier": 3,
+    "role": "Speaker of the House",
+    "committees": [],
+    "chamber": "House",
+    "state": "LA",
+    "party": "R"
+  },
+  "Chuck Schumer": {
+    "multiplier": 3,
+    "role": "Senate Minority Leader",
+    "committees": [],
+    "chamber": "Senate",
+    "state": "NY",
+    "party": "D"
+  },
+  "Mitch McConnell": {
+    "multiplier": 1,
+    "role": "Rules Chair, Senior Senator (retiring 2027)",
+    "committees": ["Appropriations", "Agriculture"],
+    "chamber": "Senate",
+    "state": "KY",
+    "party": "R"
+  },
+  "Hakeem Jeffries": {
+    "multiplier": 3,
+    "role": "House Minority Leader",
+    "committees": [],
+    "chamber": "House",
+    "state": "NY",
+    "party": "D"
+  },
+  "John Thune": {
+    "multiplier": 3,
+    "role": "Senate Majority Leader",
+    "committees": [],
+    "chamber": "Senate",
+    "state": "SD",
+    "party": "R"
+  },
+  "Jack Reed": {
+    "multiplier": 2,
+    "role": "Armed Services Ranking",
+    "committees": ["Armed Services", "Appropriations"],
+    "chamber": "Senate",
+    "state": "RI",
+    "party": "D"
+  },
+  "Roger Wicker": {
+    "multiplier": 2,
+    "role": "Armed Services Chair",
+    "committees": ["Armed Services"],
+    "chamber": "Senate",
+    "state": "MS",
+    "party": "R"
+  },
+  "French Hill": {
+    "multiplier": 2,
+    "role": "Financial Services Chair",
+    "committees": ["Financial Services"],
+    "chamber": "House",
+    "state": "AR",
+    "party": "R"
+  },
+  "Tim Scott": {
+    "multiplier": 2,
+    "role": "Banking Chair",
+    "committees": ["Banking"],
+    "chamber": "Senate",
+    "state": "SC",
+    "party": "R"
+  },
+  "Mark Warner": {
+    "multiplier": 2,
+    "role": "Intelligence Vice Chair",
+    "committees": ["Intelligence", "Banking", "Finance"],
+    "chamber": "Senate",
+    "state": "VA",
+    "party": "D"
+  },
+  "Mike Rogers": {
+    "multiplier": 2,
+    "role": "House Armed Services Chair",
+    "committees": ["Armed Services"],
+    "chamber": "House",
+    "state": "AL",
+    "party": "R"
+  },
+  "Tom Cotton": {
+    "multiplier": 2,
+    "role": "Intelligence Chair",
+    "committees": ["Intelligence", "Armed Services", "Judiciary"],
+    "chamber": "Senate",
+    "state": "AR",
+    "party": "R"
+  },
+  "Markwayne Mullin": {
+    "multiplier": 2,
+    "role": "Armed Services",
+    "committees": ["Armed Services", "Energy & Natural Resources"],
+    "chamber": "Senate",
+    "state": "OK",
+    "party": "R"
+  },
+  "Shelley Moore Capito": {
+    "multiplier": 2,
+    "role": "Appropriations",
+    "committees": ["Appropriations", "Energy & Natural Resources"],
+    "chamber": "Senate",
+    "state": "WV",
+    "party": "R"
+  },
+  "Michael Guest": {
+    "multiplier": 2,
+    "role": "Ethics Chair",
+    "committees": ["Ethics", "Homeland Security"],
+    "chamber": "House",
+    "state": "MS",
+    "party": "R"
+  },
+  "Susan Collins": {
+    "multiplier": 2,
+    "role": "Appropriations Chair",
+    "committees": ["Appropriations", "Intelligence"],
+    "chamber": "Senate",
+    "state": "ME",
+    "party": "R"
+  },
+  "Cleo Fields": {
+    "multiplier": 2,
+    "role": "Active Trader",
+    "committees": ["Financial Services"],
+    "chamber": "House",
+    "state": "LA",
+    "party": "D"
+  },
+  "Jefferson Shreve": {
+    "multiplier": 2,
+    "role": "Active Trader",
+    "committees": ["Small Business", "Veterans' Affairs"],
+    "chamber": "House",
+    "state": "IN",
+    "party": "R"
+  },
+  "Adam Smith": {
+    "multiplier": 2,
+    "role": "Armed Services Ranking",
+    "committees": ["Armed Services"],
+    "chamber": "House",
+    "state": "WA",
+    "party": "D"
+  },
+  "Jason Crow": {
+    "multiplier": 2,
+    "role": "Intelligence",
+    "committees": ["Intelligence", "Armed Services"],
+    "chamber": "House",
+    "state": "CO",
+    "party": "D"
+  }
 }
