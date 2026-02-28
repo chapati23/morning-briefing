@@ -4,10 +4,15 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  classifyMarket,
   extractOutcomeName,
+  extractTopOutcomes,
   formatOutcomeWithChange,
   formatVolume,
   truncate,
+  type ClassifiedMarket,
+  type GammaMarket,
+  type ParsedMarket,
   type TopOutcome,
 } from "../src/sources/polymarket";
 
@@ -247,5 +252,200 @@ describe("formatOutcomeWithChange", () => {
       change: 0.127,
     };
     expect(formatOutcomeWithChange(outcome)).toBe("Test — 50% (↑13%)");
+  });
+});
+
+// ============================================================================
+// extractTopOutcomes
+// ============================================================================
+
+// Helper to build a minimal GammaMarket for testing
+const makeMarket = (
+  question: string,
+  lastTradePrice: number,
+  oneDayPriceChange = 0,
+): GammaMarket => ({
+  id: "test-id",
+  question,
+  slug: "test-slug",
+  outcomePrices: JSON.stringify([String(lastTradePrice)]),
+  volume: "0",
+  volumeNum: 0,
+  volume24hr: 0,
+  liquidity: "0",
+  liquidityNum: 0,
+  endDate: "2026-12-31T00:00:00Z",
+  category: "politics",
+  oneDayPriceChange,
+  oneHourPriceChange: 0,
+  oneWeekPriceChange: 0,
+  lastTradePrice,
+});
+
+describe("extractTopOutcomes", () => {
+  it("returns top outcomes for normal multi-market event (outcomes in 1-99% range)", () => {
+    const markets = [
+      makeMarket("Will Trump win?", 0.55, 0.05),
+      makeMarket("Will Harris win?", 0.3, -0.04),
+      makeMarket("Will Biden win?", 0.1, -0.01),
+    ];
+    const result = extractTopOutcomes(markets);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result[0]?.probability).toBeCloseTo(55, 0);
+    expect(result[0]?.name).toBe("Trump");
+  });
+
+  it("returns results when all outcomes are fully resolved (~0.1% or ~99.9%)", () => {
+    // Bug 2: previously the filter (prob > 0.5 && prob < 99.5) excluded everything
+    const markets = [
+      makeMarket("US strikes Iran by January 31, 2026?", 0.999, 0.65),
+      makeMarket("US strikes Iran by February 28, 2026?", 0.001, -0.01),
+      makeMarket("US strikes Iran by March 31, 2026?", 0.001, 0),
+    ];
+    const result = extractTopOutcomes(markets);
+    // Fallback must kick in — should return the ~99.9% outcome(s)
+    expect(result.length).toBeGreaterThan(0);
+    // The highest-probability outcome should be ~99.9%
+    expect(result[0]?.probability).toBeCloseTo(99.9, 0);
+  });
+
+  it("excludes truly 0% and 100% outcomes even in fallback", () => {
+    const markets = [
+      makeMarket("Option A", 1, 0), // exactly 100% — should be excluded
+      makeMarket("Option B", 0.999, 0), // ~99.9% — should appear
+      makeMarket("Option C", 0, 0), // exactly 0% — should be excluded
+    ];
+    const result = extractTopOutcomes(markets);
+    expect(result.length).toBe(1);
+    expect(result[0]?.probability).toBeCloseTo(99.9, 0);
+  });
+
+  it("returns at most 2 outcomes", () => {
+    const markets = [
+      makeMarket("Option A", 0.4, 0.02),
+      makeMarket("Option B", 0.3, -0.03),
+      makeMarket("Option C", 0.2, 0.01),
+      makeMarket("Option D", 0.1, -0.01),
+    ];
+    const result = extractTopOutcomes(markets);
+    expect(result.length).toBeLessThanOrEqual(2);
+  });
+});
+
+// ============================================================================
+// classifyMarket — multi-market mover classification (Bug 1 regression)
+// ============================================================================
+
+// Helper to build a minimal ParsedMarket for classifyMarket tests
+const makeMultiMarketParsed = (
+  title: string,
+  primaryDayChange: number,
+  maxAbsDayChange: number,
+): ParsedMarket => ({
+  id: "pm-test",
+  title,
+  slug: "test-slug",
+  probability: 50,
+  oneDayPriceChange: primaryDayChange,
+  oneHourPriceChange: 0,
+  oneWeekPriceChange: 0,
+  volume: 1_000_000,
+  volume24hr: 10_000,
+  liquidity: 200_000,
+  endDate: new Date("2026-12-31"),
+  category: "politics",
+  url: "https://polymarket.com/event/test-slug",
+  isMultiMarket: true,
+  maxAbsDayChange,
+});
+
+describe("classifyMarket", () => {
+  it("classifies multi-market event as mover when a sub-market has large change even if primary is small", () => {
+    // Bug 1: previously used primary market's oneDayPriceChange (-0.006) instead of maxAbsDayChange (0.65)
+    const market = makeMultiMarketParsed(
+      "When will US strike Iran?",
+      -0.006, // primary market: tiny change
+      0.65, // another sub-market: huge change
+    );
+    const classified: ClassifiedMarket = classifyMarket(market);
+    expect(classified.isMover).toBe(true);
+  });
+
+  it("does NOT classify as mover when all sub-markets have small changes", () => {
+    const market = makeMultiMarketParsed(
+      "Some election market",
+      -0.006,
+      0.006, // max is also tiny
+    );
+    const classified = classifyMarket(market);
+    expect(classified.isMover).toBe(false);
+  });
+
+  it("sorts movers by maxAbsDayChange (largest first)", () => {
+    const smallMover = makeMultiMarketParsed("Small mover", -0.006, 0.12);
+    const bigMover = makeMultiMarketParsed("Big mover", -0.006, 0.65);
+
+    const classified = [smallMover, bigMover]
+      .map(classifyMarket)
+      .filter((m) => m.isMover)
+      .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange);
+
+    expect(classified[0]?.title).toBe("Big mover");
+    expect(classified[1]?.title).toBe("Small mover");
+  });
+});
+
+// ============================================================================
+// formatOutcomeWithChange — additional edge cases
+// ============================================================================
+
+describe("formatOutcomeWithChange — edge cases", () => {
+  it("handles exactly 0 change", () => {
+    const outcome: TopOutcome = {
+      name: "Option A",
+      probability: 50,
+      change: 0,
+    };
+    expect(formatOutcomeWithChange(outcome)).toBe("Option A — 50%");
+  });
+
+  it("handles very large positive change", () => {
+    const outcome: TopOutcome = {
+      name: "Option A",
+      probability: 80,
+      change: 0.65,
+    };
+    expect(formatOutcomeWithChange(outcome)).toBe("Option A — 80% (↑65%)");
+  });
+
+  it("handles very large negative change", () => {
+    const outcome: TopOutcome = {
+      name: "Option B",
+      probability: 5,
+      change: -0.72,
+    };
+    expect(formatOutcomeWithChange(outcome)).toBe("Option B — 5% (↓72%)");
+  });
+});
+
+// ============================================================================
+// extractOutcomeName — date-based questions (additional coverage)
+// ============================================================================
+
+describe("extractOutcomeName — date-based questions", () => {
+  it("extracts 'Feb 28' from 'US strikes Iran by February 28, 2026?'", () => {
+    expect(extractOutcomeName("US strikes Iran by February 28, 2026?")).toBe(
+      "Feb 28",
+    );
+  });
+
+  it("extracts 'Jan 31' from date-based market question", () => {
+    expect(extractOutcomeName("US strikes Iran by January 31, 2026?")).toBe(
+      "Jan 31",
+    );
+  });
+
+  it("extracts 'Mar 15' from date-based market question", () => {
+    expect(extractOutcomeName("Event happens by March 15?")).toBe("Mar 15");
   });
 });
