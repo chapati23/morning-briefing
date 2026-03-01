@@ -1,6 +1,10 @@
 # Checkov configuration
 # See: https://www.checkov.io/2.Basics/CLI%20Command%20Reference.html
 
+# Skip Prisma Cloud API calls — adds 30s+ timeout on servers without access
+download-external-modules: false
+skip-download: true
+
 # Skip CKV_GCP_125: OIDC trust policy check has known issues (bridgecrewio/checkov#6981)
 # Our workload identity is secure: restricted to specific repository AND main branch only
 skip-check:
