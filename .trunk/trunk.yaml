@@ -11,9 +11,8 @@ runtimes:
     - node@22.16.0
     - python@3.10.8
 lint:
-  disabled:
-    - checkov # No Terraform/IaC in this repo — was taking 55s for nothing
   enabled:
+    - checkov@3.2.500
     - shellcheck@0.11.0
     - shfmt@3.6.0
     - terraform@1.1.0
