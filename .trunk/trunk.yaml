@@ -47,22 +47,28 @@ actions:
   disabled:
     - trunk-check-pre-push # Disabled in favor of trunk-check-all-pre-push
   definitions:
-    - id: all-checks-pre-push
-      display_name: All Pre-Push Checks (parallel)
-      description: Run trunk check (changed files), tests, and knip in parallel before pushing
-      run: |
-        set -e
-        trunk check &
-        pid_trunk=$!
-        bun run test:coverage &
-        pid_test=$!
-        bun run knip &
-        pid_knip=$!
-        fail=0
-        wait $pid_trunk || fail=1
-        wait $pid_test || fail=1
-        wait $pid_knip || fail=1
-        exit $fail
+    - id: trunk-check-all-pre-push
+      display_name: Trunk Check All Pre-Push
+      description: Run `trunk check --all` before pushing
+      run: trunk check --all
+      triggers:
+        - git_hooks: [pre-push]
+    - id: typecheck-pre-push
+      display_name: Typecheck Pre-Push
+      description: Run TypeScript type checking before pushing
+      run: bun run typecheck
+      triggers:
+        - git_hooks: [pre-push]
+    - id: test-pre-push
+      display_name: Test Pre-Push
+      description: Run tests with coverage before pushing
+      run: bun run test:coverage
+      triggers:
+        - git_hooks: [pre-push]
+    - id: knip-pre-push
+      display_name: Knip Pre-Push
+      description: Run knip to find unused code before pushing
+      run: bun run knip
       triggers:
         - git_hooks: [pre-push]
     - id: typecheck-pre-commit
@@ -76,4 +82,7 @@ actions:
     - trunk-fmt-pre-commit
     - trunk-upgrade-available
     - typecheck-pre-commit
-    - all-checks-pre-push
+    - trunk-check-all-pre-push
+    - typecheck-pre-push
+    - test-pre-push
+    - knip-pre-push
