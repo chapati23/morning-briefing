@@ -477,3 +477,69 @@ describe("extractOutcomeName — name priority over date", () => {
     );
   });
 });
+
+// ============================================================================
+// extractOutcomeName — numeric ranges and price targets
+// ============================================================================
+
+describe("extractOutcomeName — numeric ranges", () => {
+  it("extracts '14-17' from 'Will there be between 14 and 17 US strikes...'", () => {
+    expect(
+      extractOutcomeName(
+        "Will there be between 14 and 17 US strikes on Somalia in February 2026?",
+      ),
+    ).toBe("14-17");
+  });
+
+  it("extracts '10-13' from 'Will there be between 10 and 13 US strikes...'", () => {
+    expect(
+      extractOutcomeName(
+        "Will there be between 10 and 13 US strikes on Somalia in February 2026?",
+      ),
+    ).toBe("10-13");
+  });
+
+  it("extracts '≤5' from 'Will there be 5 or fewer US strikes...'", () => {
+    expect(
+      extractOutcomeName(
+        "Will there be 5 or fewer US strikes on Somalia in February 2026?",
+      ),
+    ).toBe("≤5");
+  });
+
+  it("extracts '22+' from 'Will there be 22 or more US strikes...'", () => {
+    expect(
+      extractOutcomeName(
+        "Will there be 22 or more US strikes on Somalia in February 2026?",
+      ),
+    ).toBe("22+");
+  });
+});
+
+describe("extractOutcomeName — price targets", () => {
+  it("extracts '$120' from Silver hit (HIGH) $120 question", () => {
+    expect(
+      extractOutcomeName("Will Silver (SI) hit (HIGH) $120 by end of June?"),
+    ).toBe("$120");
+  });
+
+  it("extracts '$35' from Silver hit (LOW) $35 question", () => {
+    expect(
+      extractOutcomeName("Will Silver (SI) hit (LOW) $35 by end of June?"),
+    ).toBe("$35");
+  });
+
+  it("extracts '$200' from Silver hit (HIGH) $200 question", () => {
+    expect(
+      extractOutcomeName("Will Silver (SI) hit (HIGH) $200 by end of June?"),
+    ).toBe("$200");
+  });
+});
+
+describe("extractOutcomeName — skips 'there' as name", () => {
+  it("does not return 'there' from 'Will there be...'", () => {
+    // Should fall through to a better pattern, not return "there"
+    const result = extractOutcomeName("Will there be a recession in 2026?");
+    expect(result).not.toBe("there");
+  });
+});
