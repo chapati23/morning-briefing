@@ -264,6 +264,7 @@ const makeMarket = (
   question: string,
   lastTradePrice: number,
   oneDayPriceChange = 0,
+  groupItemTitle?: string,
 ): GammaMarket => ({
   id: "test-id",
   question,
@@ -280,6 +281,7 @@ const makeMarket = (
   oneHourPriceChange: 0,
   oneWeekPriceChange: 0,
   lastTradePrice,
+  groupItemTitle,
 });
 
 describe("extractTopOutcomes", () => {
@@ -329,6 +331,79 @@ describe("extractTopOutcomes", () => {
     ];
     const result = extractTopOutcomes(markets);
     expect(result.length).toBeLessThanOrEqual(2);
+  });
+
+  describe("groupItemTitle support", () => {
+    it("uses groupItemTitle when available instead of regex parsing", () => {
+      const markets = [
+        makeMarket(
+          "Will Trump nominate Kevin Warsh as the next Fed chair?",
+          0.55,
+          0.05,
+          "Kevin Warsh",
+        ),
+        makeMarket(
+          "Will Trump nominate Kevin Hassett as the next Fed chair?",
+          0.3,
+          -0.04,
+          "Kevin Hassett",
+        ),
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("Kevin Warsh");
+      expect(result[1]?.name).toBe("Kevin Hassett");
+    });
+
+    it("falls back to extractOutcomeName when groupItemTitle is missing", () => {
+      const markets = [
+        makeMarket("Will Gavin Newsom win the 2028 election?", 0.55, 0.05),
+        makeMarket("Will Joe Biden win the 2028 election?", 0.3, -0.04),
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("Newsom");
+      expect(result[1]?.name).toBe("Biden");
+    });
+
+    it("falls back to extractOutcomeName when groupItemTitle is empty string", () => {
+      const markets = [
+        makeMarket("Will Gavin Newsom win?", 0.55, 0.05, ""),
+        makeMarket("Will Joe Biden win?", 0.3, -0.04, ""),
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("Newsom");
+      expect(result[1]?.name).toBe("Biden");
+    });
+
+    it("handles mix of markets with and without groupItemTitle", () => {
+      const markets = [
+        makeMarket("Will Somalia be struck?", 0.4, 0.02, "Somalia"),
+        makeMarket("Will Iran be next?", 0.35, -0.01), // no groupItemTitle
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("Somalia");
+      // Falls back to regex for the one without groupItemTitle
+      expect(result[1]?.name).toBe("Iran");
+    });
+
+    it("uses groupItemTitle for numeric/price markets", () => {
+      const markets = [
+        makeMarket(
+          "Will the price of Bitcoin be above $60,000 on March 1?",
+          0.7,
+          0.05,
+          "60,000",
+        ),
+        makeMarket(
+          "Will the price of Bitcoin be above $80,000 on March 1?",
+          0.2,
+          -0.03,
+          "80,000",
+        ),
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("60,000");
+      expect(result[1]?.name).toBe("80,000");
+    });
   });
 });
 

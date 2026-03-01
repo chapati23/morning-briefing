@@ -245,6 +245,8 @@ export interface GammaMarket {
   oneHourPriceChange: number;
   oneWeekPriceChange: number;
   lastTradePrice: number;
+  /** Structured outcome label for multi-market events (e.g. "Kevin Warsh", "Somalia") */
+  groupItemTitle?: string;
 }
 
 const fetchAndParseMarkets = async (): Promise<ParsedMarket[]> => {
@@ -395,7 +397,7 @@ export const extractOutcomeName = (question: string): string => {
  */
 export const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
   const mapped = markets.map((m) => ({
-    name: extractOutcomeName(m.question),
+    name: m.groupItemTitle || extractOutcomeName(m.question),
     probability: m.lastTradePrice * 100,
     change: m.oneDayPriceChange,
   }));
