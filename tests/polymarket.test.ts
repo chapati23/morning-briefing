@@ -449,3 +449,31 @@ describe("extractOutcomeName — date-based questions", () => {
     expect(extractOutcomeName("Event happens by March 15?")).toBe("Mar 15");
   });
 });
+
+// ============================================================================
+// extractOutcomeName — name takes priority over date
+// ============================================================================
+
+describe("extractOutcomeName — name priority over date", () => {
+  it("extracts person name, not date, from 'Will X be named ... by February 28?'", () => {
+    expect(
+      extractOutcomeName(
+        "Will Prince Andrew be named in newly released Epstein files by February 28?",
+      ),
+    ).toBe("Andrew");
+  });
+
+  it("extracts person name from 'Will Bill Clinton be named ... by March 15?'", () => {
+    expect(
+      extractOutcomeName(
+        "Will Bill Clinton be named in newly released Epstein files by March 15?",
+      ),
+    ).toBe("Clinton");
+  });
+
+  it("still extracts date when no person name pattern matches", () => {
+    expect(extractOutcomeName("US strikes Iran by February 28, 2026?")).toBe(
+      "Feb 28",
+    );
+  });
+});
