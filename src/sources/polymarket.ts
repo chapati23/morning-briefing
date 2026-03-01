@@ -317,7 +317,29 @@ export const extractOutcomeName = (question: string): string => {
     }
   }
 
-  // Pattern 2: Person names "Will [Name] win/be/become/be named..."
+  // Pattern 2: Numeric range questions "Will there be between X and Y..."
+  const rangeMatch = question.match(/between\s+(\d+)\s+and\s+(\d+)/i);
+  if (rangeMatch?.[1] && rangeMatch[2]) {
+    return `${rangeMatch[1]}-${rangeMatch[2]}`;
+  }
+
+  // Pattern 2b: "X or fewer" / "X or more" quantity thresholds
+  const thresholdMatch = question.match(/(\d+)\s+or\s+(fewer|more|less)/i);
+  if (thresholdMatch?.[1] && thresholdMatch[2]) {
+    const op = thresholdMatch[2] === "more" ? "+" : "≤";
+    return op === "+" ? `${thresholdMatch[1]}+` : `≤${thresholdMatch[1]}`;
+  }
+
+  // Pattern 2c: Price/dollar targets "hit $120", "reach $50", "above $100"
+  const priceMatch = question.match(
+    /(?:hit|reach|above|below|over|under)\s+(?:\([^)]*\)\s*)?(\$[\d,.]+)/i,
+  );
+  if (priceMatch?.[1]) {
+    return priceMatch[1];
+  }
+
+  // Pattern 3: Person names "Will [Name] win/be/become/be named..."
+  // Skip "there" (e.g., "Will there be...") — not a person name
   const namePatterns = [
     /^Will\s+(.+?)\s+win\b/i,
     /^Will\s+(.+?)\s+be\s+named\b/i,
@@ -330,8 +352,8 @@ export const extractOutcomeName = (question: string): string => {
     const match = question.match(pattern);
     if (match?.[1]) {
       const fullName = match[1].trim();
-      // Skip if it looks like a date phrase
-      if (/^(the|a|an|us|uk)\b/i.test(fullName)) continue;
+      // Skip if it looks like a date phrase or a filler word
+      if (/^(the|a|an|us|uk|there)\b/i.test(fullName)) continue;
 
       // Return last word (usually last name) for brevity
       const parts = fullName.split(" ").filter((p) => p.length > 0);
