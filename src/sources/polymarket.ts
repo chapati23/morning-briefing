@@ -397,7 +397,7 @@ export const extractOutcomeName = (question: string): string => {
  */
 export const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
   const mapped = markets.map((m) => ({
-    name: m.groupItemTitle || extractOutcomeName(m.question),
+    name: m.groupItemTitle?.trim() || extractOutcomeName(m.question),
     probability: m.lastTradePrice * 100,
     change: m.oneDayPriceChange,
   }));
