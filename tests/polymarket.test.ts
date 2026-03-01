@@ -385,6 +385,19 @@ describe("extractTopOutcomes", () => {
       expect(result[1]?.name).toBe("Iran");
     });
 
+    it("falls back to extractOutcomeName when groupItemTitle is whitespace-only", () => {
+      const markets = [
+        makeMarket(
+          "Will Prince Andrew be named in Epstein files?",
+          0.5,
+          -0.1,
+          "  ",
+        ),
+      ];
+      const result = extractTopOutcomes(markets);
+      expect(result[0]?.name).toBe("Andrew");
+    });
+
     it("uses groupItemTitle for numeric/price markets", () => {
       const markets = [
         makeMarket(

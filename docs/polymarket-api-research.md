@@ -69,14 +69,11 @@ interface GammaMarket {
   oneHourPriceChange: number;
   oneWeekPriceChange: number;
   lastTradePrice: number;
-  // NEW FIELDS
-  groupItemTitle?: string; // Structured outcome label
-  groupItemThreshold?: number;
-  negRisk?: boolean;
-  negRiskOther?: boolean;
-  bestBid?: number;
-  bestAsk?: number;
+  // NEW FIELD — the key discovery
+  groupItemTitle?: string; // Structured outcome label for multi-market events
 }
+// Note: The API also returns groupItemThreshold, negRisk, bestBid/bestAsk,
+// but we don't need them. Only groupItemTitle is used.
 ```
 
 ### 2. Replace `extractOutcomeName`

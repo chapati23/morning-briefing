@@ -34,13 +34,10 @@ lint:
     # Scope it to actual IaC files only (terraform/, Dockerfile, .github/)
     - linters: [checkov]
       paths:
-        - package.json
-        - tsconfig.json
-        - knip.json
-        - "*.json" # non-IaC JSON (config files)
-        - .markdownlint.json
-        - .markdownlint.yaml
-        - src/data/**
+        - "*.json"
+        - "*.yaml"
+        - "*.yml"
+        - src/**
         - .cache/**
         - tests/**
 actions:
