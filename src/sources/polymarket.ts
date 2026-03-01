@@ -317,18 +317,10 @@ export const extractOutcomeName = (question: string): string => {
     }
   }
 
-  // Pattern 2: Date-based questions "...by [Month] [Day]..."
-  const dateMatch = question.match(
-    /by\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i,
-  );
-  if (dateMatch?.[1] && dateMatch[2]) {
-    const month = dateMatch[1].slice(0, 3); // "February" -> "Feb"
-    return `${month} ${dateMatch[2]}`;
-  }
-
-  // Pattern 3: Person names "Will [Name] win/be/become..."
+  // Pattern 2: Person names "Will [Name] win/be/become/be named..."
   const namePatterns = [
     /^Will\s+(.+?)\s+win\b/i,
+    /^Will\s+(.+?)\s+be\s+named\b/i,
     /^Will\s+(.+?)\s+be\b/i,
     /^Will\s+(.+?)\s+become\b/i,
     /nominate\s+(.+?)\s+as\b/i,
@@ -351,7 +343,17 @@ export const extractOutcomeName = (question: string): string => {
     }
   }
 
-  // Pattern 4: Year-based "...in [Year]?"
+  // Pattern 4: Date-based questions "...by [Month] [Day]..."
+  // (lower priority than names — otherwise "by February 28" swallows person names)
+  const dateMatch = question.match(
+    /by\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i,
+  );
+  if (dateMatch?.[1] && dateMatch[2]) {
+    const month = dateMatch[1].slice(0, 3); // "February" -> "Feb"
+    return `${month} ${dateMatch[2]}`;
+  }
+
+  // Pattern 5: Year-based "...in [Year]?"
   const yearMatch = question.match(/in\s+(202\d)/);
   if (yearMatch?.[1]) {
     return yearMatch[1];
