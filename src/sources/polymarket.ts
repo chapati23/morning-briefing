@@ -194,12 +194,13 @@ export const polymarketOddsShiftsSource: DataSource = {
       .filter((m) => !m.isMover)
       // Volume filter to avoid noise
       .filter((m) => m.volume >= CONFIG.minOddsShiftVolume)
+      // Filter out markets with no meaningful change (< 1%)
+      .filter((m) => m.maxAbsDayChange >= 0.01)
       // Sort by biggest absolute 24h change (use maxAbsDayChange for multi-market events)
       .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange)
       .slice(0, CONFIG.maxOddsShifts);
 
-    const topShift = shifts[0];
-    if (shifts.length === 0 || !topShift || topShift.maxAbsDayChange < 0.01) {
+    if (shifts.length === 0) {
       return {
         title: "Polymarket Odds Shifts",
         icon: "🔀",
@@ -517,16 +518,27 @@ export const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
 // ============================================================================
 
 /**
+ * Returns a color emoji based on the magnitude and direction of a percentage change.
+ * @param changePct - Change as a percentage (e.g. 5 for 5%, -12 for -12%)
+ */
+export const changeEmoji = (changePct: number): string => {
+  if (!Number.isFinite(changePct) || Math.abs(changePct) < 1) return "⚪";
+  if (changePct >= 10) return "🚀";
+  if (changePct >= 1) return "🟢";
+  if (changePct <= -10) return "🚨";
+  return "🔴";
+};
+
+/**
  * Format a single outcome with its change indicator.
  */
 export const formatOutcomeWithChange = (outcome: TopOutcome): string => {
   const changePct = outcome.change * 100;
+  const emoji = changeEmoji(changePct);
   if (!Number.isFinite(changePct) || Math.abs(changePct) < 1) {
-    // No significant change or invalid data
-    return `${outcome.name} — ${outcome.probability.toFixed(0)}%`;
+    return `${emoji} ${outcome.name} — ${outcome.probability.toFixed(0)}%`;
   }
-  const arrow = changePct >= 0 ? "↑" : "↓";
-  return `${outcome.name} — ${outcome.probability.toFixed(0)}% (${arrow}${Math.abs(changePct).toFixed(0)}%)`;
+  return `${emoji} ${outcome.name} — ${outcome.probability.toFixed(0)}% (${changePct >= 0 ? "↑" : "↓"}${Math.abs(changePct).toFixed(0)}%)`;
 };
 
 const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
@@ -551,7 +563,8 @@ const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
     const dayChangePct = market.oneDayPriceChange * 100;
     const prevProb = market.probability - dayChangePct;
     const sign = dayChangePct >= 0 ? "+" : "";
-    detail = `${prevProb.toFixed(0)}% → ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}%) | ${vol}`;
+    const emoji = changeEmoji(dayChangePct);
+    detail = `${emoji} ${prevProb.toFixed(0)}% → ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}%) | ${vol}`;
   }
 
   // Add trading implications as separate line if available
@@ -628,7 +641,8 @@ const formatOddsShiftItem = (market: ClassifiedMarket): BriefingItem => {
     // Binary: show the odds shift
     const dayChangePct = market.oneDayPriceChange * 100;
     const sign = dayChangePct >= 0 ? "+" : "";
-    detail = `${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}pp 24h) | ${vol}`;
+    const emoji = changeEmoji(dayChangePct);
+    detail = `${emoji} ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}pp 24h) | ${vol}`;
   }
 
   return {
@@ -668,7 +682,7 @@ export const mockPolymarketMoversSource: DataSource = {
       {
         text: "US/Israel strikes Iran by...?",
         detail:
-          "1. Feb 28 — 42% (↓8%)\n2. Mar 31 — 35% (↓5%)\n$12.5M volume\n↑USO ↑XLE ↑LMT",
+          "1. 🔴 Feb 28 — 42% (↓8%)\n2. 🔴 Mar 31 — 35% (↓5%)\n$12.5M volume\n↑USO ↑XLE ↑LMT",
         sentiment: "negative",
         url: "https://polymarket.com/event/us-israel-strikes-iran",
       },
@@ -698,7 +712,8 @@ export const mockPolymarketTopMarketsSource: DataSource = {
       items: [
         {
           text: "Democratic Presidential Nominee 2028",
-          detail: "1. Newsom — 33% (↓3%)\n2. AOC — 9% (↑2%)\n$586M volume",
+          detail:
+            "1. 🔴 Newsom — 33% (↓3%)\n2. 🟢 AOC — 9% (↑2%)\n$586M volume",
           url: "https://polymarket.com/event/democratic-presidential-nominee-2028",
         },
         {
