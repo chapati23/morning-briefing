@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "bun:test";
 import {
+  changeEmoji,
   classifyMarket,
   extractOutcomeName,
   extractTopOutcomes,
@@ -181,6 +182,45 @@ describe("truncate", () => {
 });
 
 // ============================================================================
+// changeEmoji
+// ============================================================================
+
+describe("changeEmoji", () => {
+  it("returns 🚀 for huge upmoves (≥10%)", () => {
+    expect(changeEmoji(10)).toBe("🚀");
+    expect(changeEmoji(65)).toBe("🚀");
+  });
+
+  it("returns 🟢 for moderate upmoves (1-10%)", () => {
+    expect(changeEmoji(1)).toBe("🟢");
+    expect(changeEmoji(5)).toBe("🟢");
+    expect(changeEmoji(9.9)).toBe("🟢");
+  });
+
+  it("returns ⚪ for flat (<1% absolute)", () => {
+    expect(changeEmoji(0)).toBe("⚪");
+    expect(changeEmoji(0.5)).toBe("⚪");
+    expect(changeEmoji(-0.5)).toBe("⚪");
+  });
+
+  it("returns 🔴 for moderate downmoves (-1% to -10%)", () => {
+    expect(changeEmoji(-1)).toBe("🔴");
+    expect(changeEmoji(-5)).toBe("🔴");
+    expect(changeEmoji(-9.9)).toBe("🔴");
+  });
+
+  it("returns 🚨 for huge downmoves (≤-10%)", () => {
+    expect(changeEmoji(-10)).toBe("🚨");
+    expect(changeEmoji(-72)).toBe("🚨");
+  });
+
+  it("returns ⚪ for NaN and Infinity", () => {
+    expect(changeEmoji(Number.NaN)).toBe("⚪");
+    expect(changeEmoji(Infinity)).toBe("⚪");
+  });
+});
+
+// ============================================================================
 // formatOutcomeWithChange
 // ============================================================================
 
@@ -191,7 +231,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 33,
       change: 0.05,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Newsom — 33% (↑5%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🟢 Newsom — 33% (↑5%)");
   });
 
   it("formats outcome with negative change", () => {
@@ -200,7 +240,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 20,
       change: -0.08,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Biden — 20% (↓8%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🔴 Biden — 20% (↓8%)");
   });
 
   it("formats outcome with no significant change", () => {
@@ -209,13 +249,13 @@ describe("formatOutcomeWithChange", () => {
       probability: 45,
       change: 0.005,
     };
-    // Less than 1% change - no arrow
-    expect(formatOutcomeWithChange(outcome)).toBe("Trump — 45%");
+    // Less than 1% change - flat emoji, no arrow
+    expect(formatOutcomeWithChange(outcome)).toBe("⚪ Trump — 45%");
   });
 
   it("formats outcome with zero change", () => {
     const outcome: TopOutcome = { name: "Harris", probability: 30, change: 0 };
-    expect(formatOutcomeWithChange(outcome)).toBe("Harris — 30%");
+    expect(formatOutcomeWithChange(outcome)).toBe("⚪ Harris — 30%");
   });
 
   it("handles NaN change", () => {
@@ -224,7 +264,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 50,
       change: Number.NaN,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Test — 50%");
+    expect(formatOutcomeWithChange(outcome)).toBe("⚪ Test — 50%");
   });
 
   it("handles Infinity change", () => {
@@ -233,7 +273,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 50,
       change: Infinity,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Test — 50%");
+    expect(formatOutcomeWithChange(outcome)).toBe("⚪ Test — 50%");
   });
 
   it("rounds probability to whole number", () => {
@@ -242,7 +282,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 33.7,
       change: 0.1,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Test — 34% (↑10%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🚀 Test — 34% (↑10%)");
   });
 
   it("rounds change percentage to whole number", () => {
@@ -251,7 +291,7 @@ describe("formatOutcomeWithChange", () => {
       probability: 50,
       change: 0.127,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Test — 50% (↑13%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🚀 Test — 50% (↑13%)");
   });
 });
 
@@ -494,7 +534,7 @@ describe("formatOutcomeWithChange — edge cases", () => {
       probability: 50,
       change: 0,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Option A — 50%");
+    expect(formatOutcomeWithChange(outcome)).toBe("⚪ Option A — 50%");
   });
 
   it("handles very large positive change", () => {
@@ -503,7 +543,7 @@ describe("formatOutcomeWithChange — edge cases", () => {
       probability: 80,
       change: 0.65,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Option A — 80% (↑65%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🚀 Option A — 80% (↑65%)");
   });
 
   it("handles very large negative change", () => {
@@ -512,7 +552,7 @@ describe("formatOutcomeWithChange — edge cases", () => {
       probability: 5,
       change: -0.72,
     };
-    expect(formatOutcomeWithChange(outcome)).toBe("Option B — 5% (↓72%)");
+    expect(formatOutcomeWithChange(outcome)).toBe("🚨 Option B — 5% (↓72%)");
   });
 });
 
