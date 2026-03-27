@@ -16,6 +16,7 @@ import {
   formatDeduplicatedItem,
   formatTradeItem,
   getCommitteeRelevance,
+  mergePageTrades,
   mockCongressTradesSource,
   parseAmountRange,
   parseAmountValue,
@@ -608,17 +609,108 @@ describe("formatTradeItem", () => {
 // ============================================================================
 
 describe("congressTradesSource.fetch error handling", () => {
-  it("returns empty items on fetch failure", async () => {
-    // The real source will fail in test env (no network / no real URL)
-    // We test that it gracefully returns empty items
-    const result = await congressTradesSource.fetch(new Date());
-    const section = result as {
-      title: string;
-      items: readonly { text: string }[];
-    };
-    expect(section.title).toBe("Congress Trades");
-    // Either empty or has "No significant trades" message — both are valid error handling
-    expect(Array.isArray(section.items)).toBe(true);
+  it("returns empty items when all pages fail to fetch", async () => {
+    // Stub global fetch to always reject
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = Object.assign(
+      async () => {
+        throw new Error("Network error");
+      },
+      { preconnect: () => {} },
+    ) as unknown as typeof fetch;
+    try {
+      // Use a unique date so cache doesn't serve a prior result
+      const result = await congressTradesSource.fetch(new Date("2099-01-01"));
+      const section = result as {
+        title: string;
+        items: readonly { text: string }[];
+      };
+      expect(section.title).toBe("Congress Trades");
+      expect(Array.isArray(section.items)).toBe(true);
+      expect(section.items.length).toBe(0);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});
+
+// ============================================================================
+// mergePageTrades — multi-page merge and deduplication
+// ============================================================================
+
+describe("mergePageTrades", () => {
+  const fixturePath = path.join(__dirname, "fixtures", "capitoltrades.html");
+  const singlePageHtml = fs.readFileSync(fixturePath, "utf8");
+
+  it("returns same trades as single-page parseCapitolTradesHTML", () => {
+    const expected = parseCapitolTradesHTML(singlePageHtml);
+    const result = mergePageTrades([singlePageHtml]);
+    expect(result.length).toBe(expected.length);
+  });
+
+  it("merges trades from two pages into one array", () => {
+    const singlePageTrades = parseCapitolTradesHTML(singlePageHtml);
+    const result = mergePageTrades([singlePageHtml, singlePageHtml]);
+    // All trades on page 2 have the same URL as page 1 → all deduped
+    // (if any trade lacks a URL it would be duplicated; fixture trades all have URLs)
+    const uniqueUrls = new Set(
+      singlePageTrades.map((t) => t.url).filter(Boolean),
+    );
+    expect(result.length).toBe(
+      uniqueUrls.size + (singlePageTrades.length - uniqueUrls.size),
+    );
+  });
+
+  it("deduplicates trades with the same URL across pages", () => {
+    // Build two HTML snippets that produce one trade each with identical URLs
+    const tradeHtml = (url: string, ticker: string) => `
+      <html><body><table>
+        <tr><th>H</th></tr>
+        <tr>
+          <td><h2 class="politician-name"><a href="/politicians/1">Nancy Pelosi</a></h2>
+            <div class="politician-info">
+              <span class="q-field party">Democrat</span>
+              <span class="q-field chamber">House</span>
+              <span class="q-field us-state-compact">CA</span>
+            </div>
+          </td>
+          <td>
+            <h3 class="issuer-name"><a>Corp</a></h3>
+            <span class="issuer-ticker">${ticker}:US</span>
+          </td>
+          <td>Yesterday</td>
+          <td>15 Mar2026</td>
+          <td>5 days</td>
+          <td>Self</td>
+          <td>buy</td>
+          <td>1M–5M</td>
+          <td>$100</td>
+          <td><a href="${url}">detail</a></td>
+        </tr>
+      </table></body></html>`;
+
+    const page1 = tradeHtml("/trades/999", "NVDA");
+    const page2 = tradeHtml("/trades/999", "NVDA"); // same URL → duplicate
+    const page3 = tradeHtml("/trades/888", "AAPL"); // different URL → not a duplicate
+
+    const result = mergePageTrades([page1, page2, page3]);
+    const tickers = result.map((t) => t.ticker);
+    // /trades/999 should appear once, /trades/888 once
+    expect(tickers.filter((t) => t === "NVDA").length).toBe(1);
+    expect(tickers.filter((t) => t === "AAPL").length).toBe(1);
+    expect(result.length).toBe(2);
+  });
+
+  it("handles empty pages array", () => {
+    expect(mergePageTrades([])).toEqual([]);
+  });
+
+  it("handles a page with no parseable trades", () => {
+    const noTrades =
+      "<html><body><table><tr><th>H</th></tr></table></body></html>";
+    const result = mergePageTrades([singlePageHtml, noTrades]);
+    const expected = parseCapitolTradesHTML(singlePageHtml);
+    expect(result.length).toBe(expected.length);
   });
 });
 
@@ -990,9 +1082,23 @@ describe("sanity check: no significant trades (2026-02-25 default page)", () => 
     expect(names).toContain("Jonathan Jackson");
   });
 
-  it("all trades are below $100K or score below 2", () => {
-    for (const t of trades) {
-      expect(t.amountLower < 100_000 || t.score < 2 || t.score >= 2).toBe(true);
+  it("Cleo Fields $100K watchlist trades surface at threshold 2", () => {
+    // Cleo Fields (2× politician multiplier) × $100K base score 1 = score 2.
+    // These trades should now surface since MIN_SIGNIFICANT_SCORE = 2.
+    const fieldsTrades = filtered.filter((t) => t.politician === "Cleo Fields");
+    expect(fieldsTrades.length).toBeGreaterThanOrEqual(1);
+    for (const t of fieldsTrades) {
+      expect(t.score).toBe(2);
+      expect(t.amountLower).toBe(100_000);
+    }
+  });
+
+  it("non-watchlist $100K trades are still excluded (score 1 < threshold)", () => {
+    const excluded = trades.filter(
+      (t) => t.amountLower >= 100_000 && t.score < 2,
+    );
+    for (const t of excluded) {
+      expect(filtered).not.toContain(t);
     }
   });
 });
