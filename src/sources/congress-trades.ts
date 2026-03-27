@@ -20,6 +20,7 @@ import tickerSectors from "../data/ticker-sectors.json";
 
 const CAPITOL_TRADES_URL = "https://www.capitoltrades.com/trades";
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const PAGES_TO_FETCH = 5; // ~60 trades instead of ~12
 
 // ============================================================================
 // Types
@@ -458,7 +459,7 @@ export const filterTrades = (trades: CongressTrade[]): CongressTrade[] => {
     .filter((t) => t.ticker && t.ticker !== "N/A")
     .filter((t) => !excludedTickerSet.has(t.ticker))
     .filter((t) => t.amountLower >= 100_000)
-    .filter((t) => t.score >= 3)
+    .filter((t) => t.score >= 2)
     .sort((a, b) => b.score - a.score);
 };
 
@@ -601,10 +602,13 @@ export const formatDeduplicatedItem = (
 // Data Source
 // ============================================================================
 
-const fetchCapitolTradesHTML = async (): Promise<string> => {
+const fetchCapitolTradesPage = async (page: number): Promise<string> => {
+  const url =
+    page === 1 ? CAPITOL_TRADES_URL : `${CAPITOL_TRADES_URL}?page=${page}`;
+
   const response = await backOff(
     () =>
-      fetch(CAPITOL_TRADES_URL, {
+      fetch(url, {
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
@@ -622,7 +626,7 @@ const fetchCapitolTradesHTML = async (): Promise<string> => {
       retry: (error: unknown, attemptNumber) => {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(
-          `[congress-trades] Attempt ${attemptNumber} failed: ${message}. Retrying...`,
+          `[congress-trades] Page ${page} attempt ${attemptNumber} failed: ${message}. Retrying...`,
         );
         return true;
       },
@@ -630,29 +634,69 @@ const fetchCapitolTradesHTML = async (): Promise<string> => {
   );
 
   if (!response.ok) {
-    throw new Error(`Capitol Trades returned ${response.status}`);
+    throw new Error(`Capitol Trades page ${page} returned ${response.status}`);
   }
 
   return response.text();
 };
 
+const fetchCapitolTradesHTML = async (): Promise<string> => {
+  // Fetch multiple pages sequentially to avoid rate limiting
+  const pages: string[] = [];
+  for (let i = 1; i <= PAGES_TO_FETCH; i++) {
+    try {
+      const html = await fetchCapitolTradesPage(i);
+      pages.push(html);
+      // Small delay between pages to be polite
+      if (i < PAGES_TO_FETCH) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[congress-trades] Failed to fetch page ${i}, stopping pagination: ${message}`,
+      );
+      break;
+    }
+  }
+  if (pages.length === 0) {
+    throw new Error("Failed to fetch any pages from Capitol Trades");
+  }
+  console.log(`[congress-trades] Fetched ${pages.length} pages`);
+  // Return pages joined — parseCapitolTradesHTML will parse each independently
+  return pages.join("\n<!-- PAGE_BREAK -->\n");
+};
+
 export const congressTradesSource: DataSource = {
   name: "Congress Trades",
   priority: 6,
-  timeoutMs: 30_000,
+  timeoutMs: 90_000, // 5 pages × ~15s each worst case
 
   fetch: async (date: Date): Promise<BriefingSection> => {
     const dateKey = date.toISOString().split("T")[0];
     const cacheKey = `congress-trades-${dateKey}`;
 
     try {
-      const html = await withCache(cacheKey, fetchCapitolTradesHTML, {
+      const combinedHtml = await withCache(cacheKey, fetchCapitolTradesHTML, {
         ttlMs: CACHE_TTL_MS,
       });
 
-      const allTrades = parseCapitolTradesHTML(html);
+      // Parse each page separately and merge, deduplicating by trade URL
+      const pages = combinedHtml.split("\n<!-- PAGE_BREAK -->\n");
+      const seenUrls = new Set<string>();
+      const allTrades: CongressTrade[] = [];
+      for (const html of pages) {
+        const pageTrades = parseCapitolTradesHTML(html);
+        for (const trade of pageTrades) {
+          if (!trade.url || !seenUrls.has(trade.url)) {
+            if (trade.url) seenUrls.add(trade.url);
+            allTrades.push(trade);
+          }
+        }
+      }
+
       console.log(
-        `[congress-trades] Parsed ${allTrades.length} trades, filtering...`,
+        `[congress-trades] Parsed ${allTrades.length} trades across ${pages.length} pages, filtering...`,
       );
 
       const filtered = filterTrades(allTrades);
@@ -664,8 +708,8 @@ export const congressTradesSource: DataSource = {
           icon: "🏛",
           items: [
             {
-              text: "No significant trades in the last 24h",
-              detail: `${allTrades.length} trades checked, none passed filters`,
+              text: "No significant trades recently",
+              detail: `${allTrades.length} trades checked across ${pages.length} pages, none passed filters`,
             },
           ],
         };
