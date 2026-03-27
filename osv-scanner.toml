@@ -92,3 +92,13 @@ ignoreUntil = 2026-09-01
 id = "GHSA-vrm6-8vpv-qv8q"
 reason = "undici unbounded memory in WebSocket permessage-deflate — transitive dep"
 ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-4992-7rv2-5pvq"
+reason = "undici CRLF injection via upgrade option — transitive dep, no direct upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-f269-vfmq-vjvj"
+reason = "undici WebSocket 64-bit length overflow — transitive dep, no direct upgrade path"
+ignoreUntil = 2026-09-01
