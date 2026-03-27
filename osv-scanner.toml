@@ -27,3 +27,68 @@ ignoreUntil = 2026-06-01
 id = "GHSA-fj3w-jwp8-x2g3"
 reason = "fast-xml-parser stack overflow — transitive dep of trunk tooling, low severity"
 ignoreUntil = 2026-06-01
+
+[[IgnoredVulns]]
+id = "GHSA-vpq2-c234-7xj6"
+reason = "@tootallnate/once incorrect control flow — transitive dep, no upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-f886-m6hf-6m8v"
+reason = "brace-expansion zero-step sequence DoS — transitive dep, no direct upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-8gc5-j5rx-235r"
+reason = "fast-xml-parser numeric entity expansion — transitive dep of trunk tooling, no direct upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-jp2q-39xq-3w4g"
+reason = "fast-xml-parser entity expansion limits bypass — transitive dep of trunk tooling"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-25h7-pfq9-p65f"
+reason = "flatted unbounded recursion DoS — transitive dep, no upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-rf6f-7fwh-wjgh"
+reason = "flatted prototype pollution — transitive dep, no upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-3v7f-55p6-f55p"
+reason = "picomatch method injection via POSIX classes — transitive dep of trunk tooling"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-c2c7-rcm5-vvqj"
+reason = "picomatch ReDoS via extglob quantifiers — transitive dep of trunk tooling"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-v3rj-xjv7-4jmq"
+reason = "smol-toml DoS via commented lines — transitive dep, no upgrade path"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-2mjp-6q6p-2qxm"
+reason = "undici HTTP smuggling — transitive dep, no direct upgrade path available"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-phc3-fgpg-7m6h"
+reason = "undici unbounded memory via DeduplicationHandler — transitive dep"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-v9p9-hfj2-hcw8"
+reason = "undici unhandled exception in WebSocket client — transitive dep"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-vrm6-8vpv-qv8q"
+reason = "undici unbounded memory in WebSocket permessage-deflate — transitive dep"
+ignoreUntil = 2026-09-01
