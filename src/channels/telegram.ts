@@ -117,7 +117,12 @@ export const formatSection = (section: BriefingSection): string => {
       const timeParts = item.timePrefix
         ? `${item.timePrefix} ${timeStr}`
         : timeStr;
-      const calendarLink = `[${escapeMarkdown(timeParts)}](${escapeUrlForMarkdown(item.calendarUrl)})`;
+      const safeCalendarUrl = isSafeLinkUrl(item.calendarUrl)
+        ? item.calendarUrl
+        : undefined;
+      const calendarLink = safeCalendarUrl
+        ? `[${escapeMarkdown(timeParts)}](${escapeUrlForMarkdown(safeCalendarUrl)})`
+        : escapeMarkdown(timeParts);
       const formattedText = formatTextWithMonospace(text);
       line = `${indent}${bullet} ${calendarLink} ${formattedText}`;
 
@@ -135,12 +140,14 @@ export const formatSection = (section: BriefingSection): string => {
 
       const label = labelledMatch?.[1];
       const value = labelledMatch?.[2];
+      const safeItemUrl =
+        item.url && isSafeLinkUrl(item.url) ? item.url : undefined;
 
-      if (label && value && item.url) {
+      if (label && value && safeItemUrl) {
         const escapedLabel = escapeMarkdown(`${label}: `);
         const formattedValue = `\`${escapeMarkdownInCode(value)}\``;
         const sentimentPrefix = sentiment ? `${sentiment} ` : "";
-        line = `${indent}${bullet} ${sentimentPrefix}${timePrefix}${escapedLabel}[${formattedValue}](${escapeUrlForMarkdown(item.url)})`;
+        line = `${indent}${bullet} ${sentimentPrefix}${timePrefix}${escapedLabel}[${formattedValue}](${escapeUrlForMarkdown(safeItemUrl)})`;
         // Sentiment is already included as a prefix, don't add it again
       } else {
         // Regular items: link the whole text unless a specific substring is requested
@@ -149,10 +156,10 @@ export const formatSection = (section: BriefingSection): string => {
           const prefix = sentiment ? `${sentiment} ` : "";
           line = `${indent}${bullet} ${prefix}${monoText}`;
         } else {
-          const formattedText = item.url
+          const formattedText = safeItemUrl
             ? item.linkText
-              ? formatTextWithLinkedSubstring(text, item.linkText, item.url)
-              : `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
+              ? formatTextWithLinkedSubstring(text, item.linkText, safeItemUrl)
+              : `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(safeItemUrl)})`
             : formatTextWithMonospace(text);
 
           if (item.sentimentPrefix && sentiment) {
@@ -174,8 +181,15 @@ export const formatSection = (section: BriefingSection): string => {
       const indent = isSubItem ? "     " : "   ";
       // Handle multi-line details - each line gets its own italic formatting
       const detailLines = item.detail.split("\n");
+      const safeDetailUrl =
+        item.detailUrl && isSafeLinkUrl(item.detailUrl)
+          ? item.detailUrl
+          : undefined;
       for (const detailLine of detailLines) {
-        lines.push(`${indent}_${escapeMarkdown(detailLine)}_`);
+        const formattedDetail = safeDetailUrl
+          ? `_[${escapeMarkdown(detailLine)}](${escapeUrlForMarkdown(safeDetailUrl)})_`
+          : `_${escapeMarkdown(detailLine)}_`;
+        lines.push(`${indent}${formattedDetail}`);
       }
     }
 
@@ -230,7 +244,19 @@ export const escapeMarkdown = (text: string): string => {
   return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
 };
 
-// Escape URLs for use inside MarkdownV2 links - only ) and \ need escaping
+export const isSafeLinkUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+      parsed.hostname.length > 0
+    );
+  } catch {
+    return false;
+  }
+};
+
+// Escape URLs for use inside MarkdownV2 links - only ) and \\ need escaping
 export const escapeUrlForMarkdown = (url: string): string => {
   return url.replace(/([)\\])/g, "\\$1");
 };

@@ -13,6 +13,7 @@ import {
   formatTextWithMonospace,
   formatTime,
   getSentimentEmoji,
+  isSafeLinkUrl,
 } from "../src/channels/telegram";
 import type { Briefing, BriefingSection } from "../src/types";
 
@@ -79,6 +80,24 @@ describe("escapeMarkdown", () => {
 
   it("handles plain text without special chars", () => {
     expect(escapeMarkdown("Hello World")).toBe("Hello World");
+  });
+});
+
+// ============================================================================
+// escapeUrlForMarkdown
+// ============================================================================
+
+describe("isSafeLinkUrl", () => {
+  it("allows https URLs", () => {
+    expect(isSafeLinkUrl("https://example.com/path")).toBe(true);
+  });
+
+  it("rejects javascript URLs", () => {
+    expect(isSafeLinkUrl("javascript:alert(1)")).toBe(false);
+  });
+
+  it("rejects invalid URLs", () => {
+    expect(isSafeLinkUrl("not a url")).toBe(false);
   });
 });
 
@@ -400,6 +419,41 @@ describe("formatSection", () => {
     };
     const result = formatSection(section);
     expect(result).toContain("_Detail line_");
+  });
+
+  it("formats linked detail line", () => {
+    const section: BriefingSection = {
+      title: "Test",
+      icon: "📊",
+      items: [
+        {
+          text: "Item",
+          detail: "$500K – $1M · traded Mar 18 · filed Apr 7",
+          detailUrl: "https://www.capitoltrades.com/trades/123",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain(
+      "_[$500K – $1M · traded Mar 18 · filed Apr 7](https://www.capitoltrades.com/trades/123)_",
+    );
+  });
+
+  it("does not link unsafe detail URLs", () => {
+    const section: BriefingSection = {
+      title: "Test",
+      icon: "📊",
+      items: [
+        {
+          text: "Item",
+          detail: "$500K – $1M · traded Mar 18 · filed Apr 7",
+          detailUrl: "javascript:alert(1)",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain("_$500K – $1M · traded Mar 18 · filed Apr 7_");
+    expect(result).not.toContain("javascript:alert(1)");
   });
 
   it("formats item with multi-line detail", () => {
