@@ -23,6 +23,7 @@ export interface BriefingSection {
 export interface BriefingItem {
   readonly text: string;
   readonly detail?: string;
+  readonly detailUrl?: string; // Optional link target for the detail line
   readonly time?: Date;
   readonly timePrefix?: string; // Short label shown before the time (e.g. "Wed")
   readonly url?: string;

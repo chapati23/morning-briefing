@@ -316,6 +316,24 @@ const cleanTicker = (ticker: string): string => {
   return ticker.split(":")[0]?.trim() ?? ticker;
 };
 
+const sanitizeCapitolTradesUrl = (href: string): string => {
+  if (!href) return "";
+
+  try {
+    const parsed = new URL(href, "https://www.capitoltrades.com");
+    const isAllowedHost =
+      parsed.hostname === "www.capitoltrades.com" ||
+      parsed.hostname === "capitoltrades.com";
+    const isTradePath = parsed.pathname.startsWith("/trades/");
+
+    if (!isAllowedHost || !isTradePath) return "";
+
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+};
+
 export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
   const $ = cheerio.load(html);
   const trades: CongressTrade[] = [];
@@ -380,11 +398,7 @@ export const parseCapitolTradesHTML = (html: string): CongressTrade[] => {
           $(row).find("a[href*='/trades/']").attr("href") ??
           politicianCell.find("a[href*='/trades/']").attr("href") ??
           "";
-        const url = rowLink
-          ? rowLink.startsWith("http")
-            ? rowLink
-            : `https://www.capitoltrades.com${rowLink}`
-          : "";
+        const url = sanitizeCapitolTradesUrl(rowLink);
 
         const tradeDate = parseTradeDate(tradeDateText);
         if (!tradeDate) {
@@ -486,7 +500,13 @@ export const getTradingViewUrl = (ticker: string): string => {
 
 export const formatTradeItem = (
   trade: CongressTrade,
-): { text: string; detail: string; url: string; linkText: string } => {
+): {
+  text: string;
+  detail: string;
+  detailUrl: string;
+  url: string;
+  linkText: string;
+} => {
   const prefix = trade.hot ? "🔥 " : "";
   const action = trade.type === "buy" ? "purchased" : "sold";
   const text = `${prefix}${formatChamber(trade.chamber)} ${trade.politician} (${formatPartyState(trade)}) ${action} ${trade.ticker}`;
@@ -497,6 +517,7 @@ export const formatTradeItem = (
   return {
     text,
     detail,
+    detailUrl: trade.url,
     url: getTradingViewUrl(trade.ticker),
     linkText: trade.ticker,
   };
@@ -551,6 +572,7 @@ export const deduplicateTrades = (
       const totalAmountLower = group.reduce((sum, t) => sum + t.amountLower, 0);
       const maxScore = Math.max(...group.map((t) => t.score));
       const relevantTrade = group.find((t) => t.committeeRelevance);
+      const detailTrade = group.find((t) => t.url) ?? first;
       result.push({
         politician: first.politician,
         party: first.party,
@@ -563,7 +585,7 @@ export const deduplicateTrades = (
         maxScore,
         hot: maxScore >= 6,
         trades: group,
-        url: first.url,
+        url: detailTrade.url,
         committeeRelevance: relevantTrade?.committeeRelevance ?? null,
       });
     }
@@ -594,7 +616,13 @@ const formatCompactAmount = (amount: number): string => {
 
 export const formatDeduplicatedItem = (
   entry: CongressTrade | GroupedTrade,
-): { text: string; detail: string; url: string; linkText: string } => {
+): {
+  text: string;
+  detail: string;
+  detailUrl: string;
+  url: string;
+  linkText: string;
+} => {
   if (!("count" in entry)) return formatTradeItem(entry);
 
   const prefix = entry.hot ? "🔥 " : "";
@@ -608,6 +636,7 @@ export const formatDeduplicatedItem = (
   return {
     text,
     detail,
+    detailUrl: entry.url,
     url: getTradingViewUrl(entry.ticker),
     linkText: entry.ticker,
   };
@@ -743,8 +772,14 @@ export const congressTradesSource: DataSource = {
         title: "Congress Trades",
         icon: "🏛",
         items: deduplicated.map((entry) => {
-          const { text, detail, url, linkText } = formatDeduplicatedItem(entry);
-          return { text, detail, ...(url ? { url, linkText } : {}) };
+          const { text, detail, detailUrl, url, linkText } =
+            formatDeduplicatedItem(entry);
+          return {
+            text,
+            detail,
+            ...(detailUrl ? { detailUrl } : {}),
+            ...(url ? { url, linkText } : {}),
+          };
         }),
       };
     } catch (error) {

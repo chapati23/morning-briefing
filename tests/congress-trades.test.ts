@@ -210,6 +210,26 @@ describe("parseCapitolTradesHTML", () => {
     ).toBe(true);
   });
 
+  it("rejects non-Capitol-Trades absolute URLs in scraped trade links", () => {
+    const html = `<html><body><table>
+      <tr><th>H</th></tr>
+      <tr>
+        <td><h2 class="politician-name"><a>Test Person</a></h2><div class="politician-info"><span class="q-field party">Democrat</span><span class="q-field chamber">House</span><span class="q-field us-state-compact">CA</span><a href="https://evil.example/trades/123">detail</a></div></td>
+        <td><h3 class="issuer-name"><a>Acme</a></h3><span class="issuer-ticker">ACME:US</span></td>
+        <td>Yesterday</td>
+        <td>10 Feb2026</td>
+        <td>5 days</td>
+        <td>Self</td>
+        <td>buy</td>
+        <td>100K–250K</td>
+        <td>$100</td>
+      </tr>
+    </table></body></html>`;
+    const trades = parseCapitolTradesHTML(html);
+    expect(trades.length).toBe(1);
+    expect(defined(trades[0]).url).toBe("");
+  });
+
   it("extracts party", () => {
     const trades = parseCapitolTradesHTML(html);
     for (const trade of trades) {
@@ -222,6 +242,28 @@ describe("parseCapitolTradesHTML", () => {
     for (const trade of trades) {
       expect(trade.ticker).not.toContain(":");
     }
+  });
+
+  it("keeps valid Capitol Trades absolute URLs", () => {
+    const html = `<html><body><table>
+      <tr><th>H</th></tr>
+      <tr>
+        <td><h2 class="politician-name"><a>Test Person</a></h2><div class="politician-info"><span class="q-field party">Democrat</span><span class="q-field chamber">House</span><span class="q-field us-state-compact">CA</span><a href="https://www.capitoltrades.com/trades/123">detail</a></div></td>
+        <td><h3 class="issuer-name"><a>Acme</a></h3><span class="issuer-ticker">ACME:US</span></td>
+        <td>Yesterday</td>
+        <td>10 Feb2026</td>
+        <td>5 days</td>
+        <td>Self</td>
+        <td>buy</td>
+        <td>100K–250K</td>
+        <td>$100</td>
+      </tr>
+    </table></body></html>`;
+    const trades = parseCapitolTradesHTML(html);
+    expect(trades.length).toBe(1);
+    expect(defined(trades[0]).url).toBe(
+      "https://www.capitoltrades.com/trades/123",
+    );
   });
 
   it("extracts trade type", () => {
@@ -548,6 +590,30 @@ describe("deduplicateTrades", () => {
     expect(url).toBe("https://www.tradingview.com/symbols/NVDA/");
     expect(linkText).toBe("NVDA");
   });
+
+  it("keeps Capitol Trades detailUrl for grouped entries", () => {
+    const trades = [
+      makeTrade({ url: "https://www.capitoltrades.com/trades/123" }),
+      makeTrade({ amountLower: 500_000, score: 10 }),
+    ];
+    const result = deduplicateTrades(trades);
+    const { detailUrl } = formatDeduplicatedItem(defined(result[0]));
+    expect(detailUrl).toBe("https://www.capitoltrades.com/trades/123");
+  });
+
+  it("keeps Capitol Trades detailUrl when only a later grouped trade has it", () => {
+    const trades = [
+      makeTrade({ url: "" }),
+      makeTrade({
+        amountLower: 500_000,
+        score: 10,
+        url: "https://www.capitoltrades.com/trades/456",
+      }),
+    ];
+    const result = deduplicateTrades(trades);
+    const { detailUrl } = formatDeduplicatedItem(defined(result[0]));
+    expect(detailUrl).toBe("https://www.capitoltrades.com/trades/456");
+  });
 });
 
 // ============================================================================
@@ -631,6 +697,13 @@ describe("formatTradeItem", () => {
     const { url, linkText } = formatTradeItem(makeTrade({ ticker: "NVDA" }));
     expect(url).toBe("https://www.tradingview.com/symbols/NVDA/");
     expect(linkText).toBe("NVDA");
+  });
+
+  it("returns Capitol Trades detailUrl for the second line", () => {
+    const { detailUrl } = formatTradeItem(
+      makeTrade({ url: "https://www.capitoltrades.com/trades/123" }),
+    );
+    expect(detailUrl).toBe("https://www.capitoltrades.com/trades/123");
   });
 });
 
