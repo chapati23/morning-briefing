@@ -143,14 +143,16 @@ export const formatSection = (section: BriefingSection): string => {
         line = `${indent}${bullet} ${sentimentPrefix}${timePrefix}${escapedLabel}[${formattedValue}](${escapeUrlForMarkdown(item.url)})`;
         // Sentiment is already included as a prefix, don't add it again
       } else {
-        // Regular items: link the whole text
+        // Regular items: link the whole text unless a specific substring is requested
         if (item.monospace) {
           const monoText = `\`${escapeMarkdownInCode(text)}\``;
           const prefix = sentiment ? `${sentiment} ` : "";
           line = `${indent}${bullet} ${prefix}${monoText}`;
         } else {
           const formattedText = item.url
-            ? `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
+            ? item.linkText
+              ? formatTextWithLinkedSubstring(text, item.linkText, item.url)
+              : `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(item.url)})`
             : formatTextWithMonospace(text);
 
           if (item.sentimentPrefix && sentiment) {
@@ -244,6 +246,22 @@ export const formatTextWithMonospace = (text: string): string => {
       return escapeMarkdown(part);
     })
     .join("");
+};
+
+export const formatTextWithLinkedSubstring = (
+  text: string,
+  linkText: string,
+  url: string,
+): string => {
+  const index = text.lastIndexOf(linkText);
+  if (index === -1) {
+    return `[${formatTextWithMonospace(text)}](${escapeUrlForMarkdown(url)})`;
+  }
+
+  const before = text.slice(0, index);
+  const after = text.slice(index + linkText.length);
+
+  return `${formatTextWithMonospace(before)}[${escapeMarkdown(linkText)}](${escapeUrlForMarkdown(url)})${formatTextWithMonospace(after)}`;
 };
 
 // Escape characters inside code/monospace blocks (fewer chars need escaping)

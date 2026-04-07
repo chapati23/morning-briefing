@@ -9,6 +9,7 @@ import {
   escapeUrlForMarkdown,
   formatBriefingForTelegram,
   formatSection,
+  formatTextWithLinkedSubstring,
   formatTextWithMonospace,
   formatTime,
   getSentimentEmoji,
@@ -195,6 +196,36 @@ describe("formatTextWithMonospace", () => {
 });
 
 // ============================================================================
+// formatTextWithLinkedSubstring
+// ============================================================================
+
+describe("formatTextWithLinkedSubstring", () => {
+  it("links only the requested substring", () => {
+    expect(
+      formatTextWithLinkedSubstring(
+        "Rep. Nancy Pelosi sold NVDA",
+        "NVDA",
+        "https://www.tradingview.com/symbols/NVDA/",
+      ),
+    ).toBe(
+      "Rep\\. Nancy Pelosi sold [NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
+  });
+
+  it("falls back to whole-text link when substring is missing", () => {
+    expect(
+      formatTextWithLinkedSubstring(
+        "Rep. Nancy Pelosi sold NVDA",
+        "AAPL",
+        "https://www.tradingview.com/symbols/AAPL/",
+      ),
+    ).toBe(
+      "[Rep\\. Nancy Pelosi sold NVDA](https://www.tradingview.com/symbols/AAPL/)",
+    );
+  });
+});
+
+// ============================================================================
 // getSentimentEmoji
 // ============================================================================
 
@@ -316,6 +347,27 @@ describe("formatSection", () => {
     const result = formatSection(section);
     // Title should be linked instead of having an arrow link at the end
     expect(result).toContain("[Link item](https://example.com)");
+  });
+
+  it("formats item with only a linked ticker substring", () => {
+    const section: BriefingSection = {
+      title: "Congress Trades",
+      icon: "🏛",
+      items: [
+        {
+          text: "Rep. Nancy Pelosi sold NVDA",
+          url: "https://www.tradingview.com/symbols/NVDA/",
+          linkText: "NVDA",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain(
+      "Rep\\. Nancy Pelosi sold [NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
+    expect(result).not.toContain(
+      "[Rep\\. Nancy Pelosi sold NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
   });
 
   it("formats ETF-style item with emoji on left and only value linked", () => {
