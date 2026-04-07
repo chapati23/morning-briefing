@@ -16,6 +16,7 @@ import {
   formatDeduplicatedItem,
   formatTradeItem,
   getCommitteeRelevance,
+  getTradingViewUrl,
   mergePageTrades,
   mockCongressTradesSource,
   parseAmountRange,
@@ -536,6 +537,29 @@ describe("deduplicateTrades", () => {
     expect(text).toContain("NVDA");
     expect(text).toContain("2 trades");
   });
+
+  it("formats grouped trade with TradingView URL and ticker linkText", () => {
+    const trades = [
+      makeTrade({ amountLower: 1_000_000, score: 15 }),
+      makeTrade({ amountLower: 500_000, score: 10 }),
+    ];
+    const result = deduplicateTrades(trades);
+    const { url, linkText } = formatDeduplicatedItem(defined(result[0]));
+    expect(url).toBe("https://www.tradingview.com/symbols/NVDA/");
+    expect(linkText).toBe("NVDA");
+  });
+});
+
+// ============================================================================
+// Formatting
+// ============================================================================
+
+describe("getTradingViewUrl", () => {
+  it("builds a TradingView symbol URL from a ticker", () => {
+    expect(getTradingViewUrl("NVDA")).toBe(
+      "https://www.tradingview.com/symbols/NVDA/",
+    );
+  });
 });
 
 // ============================================================================
@@ -601,6 +625,12 @@ describe("formatTradeItem", () => {
     expect(detail).toContain("1M");
     expect(detail).toContain("traded");
     expect(detail).toContain("filed");
+  });
+
+  it("returns a TradingView URL and ticker linkText", () => {
+    const { url, linkText } = formatTradeItem(makeTrade({ ticker: "NVDA" }));
+    expect(url).toBe("https://www.tradingview.com/symbols/NVDA/");
+    expect(linkText).toBe("NVDA");
   });
 });
 
@@ -1023,9 +1053,9 @@ describe("committee context in formatting", () => {
     expect(detail).not.toContain("Armed Services");
   });
 
-  it("includes url in formatted output", () => {
+  it("includes TradingView url in formatted output", () => {
     const { url } = formatTradeItem(makeTrade({}));
-    expect(url).toBe("https://www.capitoltrades.com/trades/123");
+    expect(url).toBe("https://www.tradingview.com/symbols/RTX/");
   });
 });
 

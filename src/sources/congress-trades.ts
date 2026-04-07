@@ -480,9 +480,13 @@ const formatChamber = (chamber: "House" | "Senate"): string => {
   return chamber === "Senate" ? "Sen." : "Rep.";
 };
 
+export const getTradingViewUrl = (ticker: string): string => {
+  return `https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/`;
+};
+
 export const formatTradeItem = (
   trade: CongressTrade,
-): { text: string; detail: string; url: string } => {
+): { text: string; detail: string; url: string; linkText: string } => {
   const prefix = trade.hot ? "🔥 " : "";
   const action = trade.type === "buy" ? "purchased" : "sold";
   const text = `${prefix}${formatChamber(trade.chamber)} ${trade.politician} (${formatPartyState(trade)}) ${action} ${trade.ticker}`;
@@ -490,7 +494,12 @@ export const formatTradeItem = (
     ? `${trade.committeeRelevance.committee} · `
     : "";
   const detail = `${committeeLine}${formatAmountDisplay(trade.amountRange)} · traded ${formatDate(trade.tradeDate)} · filed ${formatDate(trade.disclosureDate)}`;
-  return { text, detail, url: trade.url };
+  return {
+    text,
+    detail,
+    url: getTradingViewUrl(trade.ticker),
+    linkText: trade.ticker,
+  };
 };
 
 // ============================================================================
@@ -585,7 +594,7 @@ const formatCompactAmount = (amount: number): string => {
 
 export const formatDeduplicatedItem = (
   entry: CongressTrade | GroupedTrade,
-): { text: string; detail: string; url: string } => {
+): { text: string; detail: string; url: string; linkText: string } => {
   if (!("count" in entry)) return formatTradeItem(entry);
 
   const prefix = entry.hot ? "🔥 " : "";
@@ -596,7 +605,12 @@ export const formatDeduplicatedItem = (
     ? `${entry.committeeRelevance.committee} · `
     : "";
   const detail = `${committeeLine}Combined from ${entry.count} transactions`;
-  return { text, detail, url: entry.url };
+  return {
+    text,
+    detail,
+    url: getTradingViewUrl(entry.ticker),
+    linkText: entry.ticker,
+  };
 };
 
 // ============================================================================
@@ -729,8 +743,8 @@ export const congressTradesSource: DataSource = {
         title: "Congress Trades",
         icon: "🏛",
         items: deduplicated.map((entry) => {
-          const { text, detail, url } = formatDeduplicatedItem(entry);
-          return { text, detail, ...(url ? { url } : {}) };
+          const { text, detail, url, linkText } = formatDeduplicatedItem(entry);
+          return { text, detail, ...(url ? { url, linkText } : {}) };
         }),
       };
     } catch (error) {
