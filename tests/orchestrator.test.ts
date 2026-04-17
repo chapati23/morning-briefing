@@ -145,6 +145,43 @@ describe("runBriefing", () => {
     expect(briefing.sections[2]?.title).toBe("Low Priority");
   });
 
+  it("should sort multi-section sources by source priority even when titles differ", async () => {
+    const sources = [
+      {
+        name: "Crypto News",
+        priority: 9,
+        fetch: async () => ({
+          title: "Crypto News",
+          icon: "📰",
+          items: [{ text: "News item" }],
+        }),
+      },
+      {
+        name: "App Store Rankings",
+        priority: 7,
+        fetch: async () => [
+          {
+            title: "App Store · Finance",
+            icon: "📱",
+            items: [{ text: "Finance rank" }],
+          },
+          {
+            title: "App Store · Total",
+            icon: "📱",
+            items: [{ text: "Total rank" }],
+          },
+        ],
+      },
+    ];
+
+    const briefing = await runBriefing(sources, new Date());
+
+    expect(briefing.sections).toHaveLength(3);
+    expect(briefing.sections[0]?.title).toBe("App Store · Finance");
+    expect(briefing.sections[1]?.title).toBe("App Store · Total");
+    expect(briefing.sections[2]?.title).toBe("Crypto News");
+  });
+
   it("should exclude sections with empty items array", async () => {
     const sources = [
       createSuccessSource("Has Items", 1, [{ text: "Real data" }]),
