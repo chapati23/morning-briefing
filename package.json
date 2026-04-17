@@ -30,6 +30,9 @@
     "grammy": "^1.21.1",
     "puppeteer": "^24.35.0"
   },
+  "overrides": {
+    "basic-ftp": "^5.3.0"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
     "@types/bun": "^1.1.14",
