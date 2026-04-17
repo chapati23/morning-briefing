@@ -50,7 +50,7 @@ export const runBriefing = async (
     ),
   );
 
-  const sections: BriefingSection[] = [];
+  const sections: Array<{ section: BriefingSection; priority: number }> = [];
   const failures: SourceFailure[] = [];
 
   results.forEach((result, i) => {
@@ -61,9 +61,11 @@ export const runBriefing = async (
       console.log(`[orchestrator] ✓ ${source.name} succeeded`);
       const value = result.value;
       if (Array.isArray(value)) {
-        sections.push(...value);
+        sections.push(
+          ...value.map((section) => ({ section, priority: source.priority })),
+        );
       } else {
-        sections.push(value);
+        sections.push({ section: value, priority: source.priority });
       }
     } else {
       const errorMessage =
@@ -96,7 +98,9 @@ export const runBriefing = async (
   });
 
   // Filter out sections with no items (e.g., conditional sources with nothing to report)
-  const nonEmptySections = sections.filter((s) => s.items.length > 0);
+  const nonEmptySections = sections.filter(
+    ({ section }) => section.items.length > 0,
+  );
   if (failures.length > 0) {
     const failureSection: BriefingSection = {
       title: "⚠️ Source Failures",
@@ -106,18 +110,14 @@ export const runBriefing = async (
         sentiment: "negative" as const,
       })),
     };
-    nonEmptySections.push(failureSection);
+    nonEmptySections.push({ section: failureSection, priority: 99 });
   }
 
-  // Sort sections by priority (lower = higher in briefing)
-  // Use startsWith to match titles that include additional info (e.g., "ETF Flows from Fri, Jan 30")
-  const sortedSections = [...nonEmptySections].sort((a, b) => {
-    const priorityA =
-      sources.find((s) => a.title.startsWith(s.name))?.priority ?? 99;
-    const priorityB =
-      sources.find((s) => b.title.startsWith(s.name))?.priority ?? 99;
-    return priorityA - priorityB;
-  });
+  // Sort sections by source priority (lower = higher in briefing),
+  // preserving multi-section source ordering regardless of section title.
+  const sortedSections = [...nonEmptySections]
+    .sort((a, b) => a.priority - b.priority)
+    .map(({ section }) => section);
 
   return {
     date,
