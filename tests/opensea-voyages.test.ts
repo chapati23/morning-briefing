@@ -3,7 +3,47 @@
  */
 
 import { describe, expect, it } from "bun:test";
-import { extractOtpCode, parseVoyages } from "../src/sources/opensea-voyages";
+import {
+  extractOtpCode,
+  parseVoyages,
+  selectReusableInboxAddress,
+} from "../src/sources/opensea-voyages";
+
+// ============================================================================
+// selectReusableInboxAddress
+// ============================================================================
+
+describe("selectReusableInboxAddress", () => {
+  it("reuses the newest OpenSea inbox when env persistence is unavailable", () => {
+    expect(
+      selectReusableInboxAddress([
+        {
+          inboxId: "older@agentmail.to",
+          displayName: "Morning Briefing - OpenSea",
+          updatedAt: "2026-02-12T16:11:52.006Z",
+        },
+        {
+          inboxId: "other@agentmail.to",
+          displayName: "Something Else",
+          updatedAt: "2026-04-24T08:00:00.000Z",
+        },
+        {
+          inboxId: "newer@agentmail.to",
+          displayName: "Morning Briefing - OpenSea",
+          updatedAt: "2026-04-24T08:00:00.000Z",
+        },
+      ]),
+    ).toBe("newer@agentmail.to");
+  });
+
+  it("returns undefined when no reusable OpenSea inbox exists", () => {
+    expect(
+      selectReusableInboxAddress([
+        { inboxId: "other@agentmail.to", displayName: "Something Else" },
+      ]),
+    ).toBeUndefined();
+  });
+});
 
 // ============================================================================
 // extractOtpCode
