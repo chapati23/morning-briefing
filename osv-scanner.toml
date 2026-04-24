@@ -102,3 +102,13 @@ ignoreUntil = 2026-09-01
 id = "GHSA-f269-vfmq-vjvj"
 reason = "undici WebSocket 64-bit length overflow — transitive dep, no direct upgrade path"
 ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-gh4j-gqv2-49f6"
+reason = "fast-xml-parser XMLBuilder delimiter injection — transitive via @google-cloud/storage, no direct use of XMLBuilder with attacker-controlled input in this app"
+ignoreUntil = 2026-09-01
+
+[[IgnoredVulns]]
+id = "GHSA-w5hq-g745-h8pq"
+reason = "uuid missing buffer bounds check in v3/v5/v6 with buf argument — transitive only, and observed dependency usage is v4 generation"
+ignoreUntil = 2026-09-01

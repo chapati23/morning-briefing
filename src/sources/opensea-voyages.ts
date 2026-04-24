@@ -34,6 +34,33 @@ const log = (msg: string) => {
 // ============================================================================
 
 const ENV_KEY_INBOX = "AGENTMAIL_EMAIL_ADDRESS";
+const OPENSEA_INBOX_DISPLAY_NAME = "Morning Briefing - OpenSea";
+
+type ReusableInbox = {
+  readonly inboxId: string;
+  readonly displayName?: string;
+  readonly updatedAt?: string | Date;
+  readonly createdAt?: string | Date;
+};
+
+export const selectReusableInboxAddress = (
+  inboxes: readonly ReusableInbox[],
+): string | undefined =>
+  [...inboxes]
+    .filter((inbox) => inbox.displayName === OPENSEA_INBOX_DISPLAY_NAME)
+    .sort((a, b) => {
+      const aStamp = a.updatedAt ?? a.createdAt;
+      const bStamp = b.updatedAt ?? b.createdAt;
+      const aTs =
+        aStamp instanceof Date
+          ? aStamp.getTime()
+          : Date.parse(aStamp ?? "") || 0;
+      const bTs =
+        bStamp instanceof Date
+          ? bStamp.getTime()
+          : Date.parse(bStamp ?? "") || 0;
+      return bTs - aTs;
+    })[0]?.inboxId;
 
 const getOrCreateInbox = async (client: AgentMailClient): Promise<string> => {
   // Reuse saved inbox address
@@ -43,15 +70,25 @@ const getOrCreateInbox = async (client: AgentMailClient): Promise<string> => {
     return saved;
   }
 
-  // Create a new inbox
+  // Cloud Run can't persist runtime-written env files across invocations, so
+  // first try to reuse an existing AgentMail inbox before creating a new one.
+  const existing = await client.inboxes.list();
+  const reusable = selectReusableInboxAddress(existing.inboxes);
+  if (reusable) {
+    log(`Reusing existing inbox: ${reusable}`);
+    persistEnvVar(ENV_KEY_INBOX, reusable);
+    return reusable;
+  }
+
+  // Create a new inbox only if none exists yet.
   log("Creating AgentMail inbox...");
   const inbox = await client.inboxes.create({
-    displayName: "Morning Briefing - OpenSea",
+    displayName: OPENSEA_INBOX_DISPLAY_NAME,
   });
   const address = inbox.inboxId;
   log(`Created inbox: ${address}`);
 
-  // Persist for reuse
+  // Persist for reuse where supported (local dev, not durable on Cloud Run).
   persistEnvVar(ENV_KEY_INBOX, address);
   return address;
 };
