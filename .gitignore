@@ -44,3 +44,4 @@ terraform/.terraform.tfstate.lock.info
 
 # direnv (project-specific environment)
 .envrc
+HANDOVER.md
