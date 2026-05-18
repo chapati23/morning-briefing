@@ -50,7 +50,6 @@ channels/telegram.ts (formatBriefingForTelegram)
 | `overnight-futures.ts` | ES, NQ, GC, CL etc. from Yahoo Finance               |
 | `economic-calendar.ts` | Week-ahead macro events                              |
 | `appstore-rankings.ts` | iOS App Store Finance + Overall rankings             |
-| `daily-degen.ts`       | Crypto news digest                                   |
 | `polymarket.ts`        | Prediction market movements                          |
 | `congress-trades.ts`   | US Congress member stock trades from Capitol Trades  |
 
@@ -180,7 +179,6 @@ See `.cursor/rules/post-change-checks.mdc` for the full decision tree.
 | `src/sources/overnight-futures.ts` | `tests/overnight-futures.test.ts` |
 | `src/sources/polymarket.ts`        | `tests/polymarket.test.ts`        |
 | `src/sources/economic-calendar.ts` | `tests/economic-calendar.test.ts` |
-| `src/sources/daily-degen.ts`       | `tests/daily-degen.test.ts`       |
 | `src/sources/congress-trades.ts`   | `tests/congress-trades.test.ts`   |
 | `src/utils/cache.ts`               | `tests/cache.test.ts`             |
 | Multiple / integration             | `tests/e2e/briefing.test.ts`      |
@@ -201,7 +199,7 @@ See `docs/deploy-from-scratch.md` for the full deploy guide.
 | -------------------- | ---------- | --------------- | -------------------------------------------------- |
 | `TELEGRAM_BOT_TOKEN` | Yes (prod) | —               | Bot API token from @BotFather                      |
 | `TELEGRAM_CHAT_ID`   | Yes (prod) | —               | Target chat for briefings                          |
-| `AGENTMAIL_API_KEY`  | No         | —               | For email-based sources (Daily Degen, OpenSea)     |
+| `AGENTMAIL_API_KEY`  | No         | —               | For email-based OpenSea OTP login                  |
 | `TIMEZONE`           | No         | `Europe/Berlin` | Briefing timezone                                  |
 | `USE_MOCK_DATA`      | No         | `false`         | Use mock sources                                   |
 | `LOG_LEVEL`          | No         | `info`          | Logging verbosity                                  |

@@ -31,7 +31,8 @@
     "puppeteer": "^24.35.0"
   },
   "overrides": {
-    "basic-ftp": "^5.3.0"
+    "basic-ftp": "^6.0.1",
+    "ip-address": "^10.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.2",
