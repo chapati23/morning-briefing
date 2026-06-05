@@ -568,16 +568,42 @@ describe("deduplicateTrades", () => {
     expect(result.length).toBe(2);
   });
 
+  it("does not group same ticker/action across different trade dates", () => {
+    const trades = [
+      makeTrade({ tradeDate: new Date("2026-01-15") }),
+      makeTrade({ tradeDate: new Date("2026-01-16"), score: 10 }),
+    ];
+    const result = deduplicateTrades(trades);
+    expect(result.length).toBe(2);
+  });
+
   it("formats grouped trade correctly", () => {
     const trades = [
       makeTrade({ amountLower: 1_000_000, score: 15 }),
-      makeTrade({ amountLower: 500_000, score: 10 }),
+      makeTrade({
+        amountRange: "500K–1M",
+        amountLower: 500_000,
+        score: 10,
+      }),
     ];
     const result = deduplicateTrades(trades);
     const { text } = formatDeduplicatedItem(defined(result[0]));
     expect(text).toContain("Pelosi");
     expect(text).toContain("NVDA");
     expect(text).toContain("2 trades");
+    expect(text).toContain("$1.5M–$6M total");
+  });
+
+  it("sums grouped disclosure brackets instead of showing min/max legs", () => {
+    const trades = [
+      makeTrade({ amountRange: "250K–500K", amountLower: 250_000 }),
+      makeTrade({ amountRange: "500K–1M", amountLower: 500_000 }),
+    ];
+    const result = deduplicateTrades(trades);
+    const { text, detail } = formatDeduplicatedItem(defined(result[0]));
+    expect(text).toContain("2 trades, $750K–$1.5M total");
+    expect(detail).toContain("traded Jan 15");
+    expect(detail).toContain("filed Feb 20");
   });
 
   it("formats grouped trade with TradingView URL and ticker linkText", () => {
