@@ -63,11 +63,21 @@ export interface CongressTrade {
  * "250K–500K", "500K–1M", "1M–5M", "5M–25M", "25M–50M"
  */
 export const parseAmountRange = (range: string): number => {
+  return parseAmountRangeBounds(range).lower;
+};
+
+const parseAmountRangeBounds = (
+  range: string,
+): { lower: number; upper: number } => {
   const cleaned = range.replace(/[$,\s]/g, "");
-  // Extract the lower bound (before the dash/en-dash)
-  const lowerStr = cleaned.split(/[–-]/)[0]?.trim();
-  if (!lowerStr) return 0;
-  return parseAmountValue(lowerStr);
+  const [lowerStr, upperStr] = cleaned.split(/[–-]/).map((part) => part.trim());
+  if (!lowerStr) return { lower: 0, upper: 0 };
+
+  const lower = parseAmountValue(lowerStr);
+  return {
+    lower,
+    upper: upperStr ? parseAmountValue(upperStr) : lower,
+  };
 };
 
 export const parseAmountValue = (value: string): number => {
@@ -486,6 +496,13 @@ const formatDate = (date: Date): string => {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 };
 
+const formatDateSummary = (dates: Date[]): string => {
+  const formatted = [...new Set(dates.map(formatDate))];
+  if (formatted.length === 0) return "";
+  if (formatted.length === 1) return formatted[0] ?? "";
+  return `${formatted[0]}–${formatted.at(-1)}`;
+};
+
 const formatPartyState = (trade: CongressTrade): string => {
   return `${trade.party}-${trade.state}`;
 };
@@ -552,7 +569,13 @@ export const deduplicateTrades = (
   const groups = new Map<string, CongressTrade[]>();
 
   for (const trade of trades) {
-    const key = `${trade.politician}|${trade.ticker}|${trade.type}`;
+    const key = [
+      trade.politician,
+      trade.ticker,
+      trade.type,
+      trade.tradeDate.toISOString().split("T")[0],
+      trade.disclosureDate.toISOString().split("T")[0],
+    ].join("|");
     const group = groups.get(key);
     if (group) {
       group.push(trade);
@@ -599,17 +622,19 @@ export const deduplicateTrades = (
 };
 
 const formatGroupedAmount = (trades: CongressTrade[]): string => {
-  const amounts = trades.map((t) => t.amountLower).sort((a, b) => a - b);
-  const low = amounts.at(0);
-  const high = amounts.at(-1);
-  if (low === undefined || high === undefined)
+  const ranges = trades.map((t) => parseAmountRangeBounds(t.amountRange));
+  const low = ranges.reduce((sum, range) => sum + range.lower, 0);
+  const high = ranges.reduce((sum, range) => sum + range.upper, 0);
+  if (low === 0 && high === 0)
     return formatAmountDisplay(trades[0]?.amountRange ?? "");
-  if (low === high) return formatAmountDisplay(trades.at(0)?.amountRange ?? "");
   return `$${formatCompactAmount(low)}–$${formatCompactAmount(high)} total`;
 };
 
 const formatCompactAmount = (amount: number): string => {
-  if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(0)}M`;
+  if (amount >= 1_000_000) {
+    const millions = amount / 1_000_000;
+    return `${Number.isInteger(millions) ? millions.toFixed(0) : millions.toFixed(1)}M`;
+  }
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(0)}K`;
   return String(amount);
 };
@@ -632,7 +657,18 @@ export const formatDeduplicatedItem = (
   const committeeLine = entry.committeeRelevance
     ? `${entry.committeeRelevance.committee} · `
     : "";
-  const detail = `${committeeLine}Combined from ${entry.count} transactions`;
+  const tradeDates = formatDateSummary(
+    entry.trades.map((trade) => trade.tradeDate),
+  );
+  const disclosureDates = formatDateSummary(
+    entry.trades.map((trade) => trade.disclosureDate),
+  );
+  const detailParts = [
+    `Combined from ${entry.count} transactions`,
+    tradeDates ? `traded ${tradeDates}` : "",
+    disclosureDates ? `filed ${disclosureDates}` : "",
+  ].filter(Boolean);
+  const detail = `${committeeLine}${detailParts.join(" · ")}`;
   return {
     text,
     detail,
