@@ -20,6 +20,7 @@ import {
 
 const originalFetch = globalThis.fetch;
 const originalDisableCache = process.env["DISABLE_CACHE"];
+const originalNodeEnv = process.env["NODE_ENV"];
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
@@ -27,6 +28,11 @@ afterEach(() => {
     delete process.env["DISABLE_CACHE"];
   } else {
     process.env["DISABLE_CACHE"] = originalDisableCache;
+  }
+  if (originalNodeEnv === undefined) {
+    delete process.env["NODE_ENV"];
+  } else {
+    process.env["NODE_ENV"] = originalNodeEnv;
   }
 });
 
@@ -724,6 +730,37 @@ describe("etfFlowsSource", () => {
     await etfFlowsSource.fetch(firstDate);
     await etfFlowsSource.fetch(firstDate);
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it("caches and deduplicates in-flight requests in production", async () => {
+    process.env["NODE_ENV"] = "production";
+    process.env["DISABLE_CACHE"] = "false";
+    const jun9 = Date.UTC(2026, 5, 9) / 1000;
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          makePage({
+            [jun9]: {
+              date: jun9,
+              Bitcoin: 10_000_000,
+              Ethereum: 20_000_000,
+              Solana: 30_000_000,
+            },
+          }),
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const briefingDate = new Date(2026, 5, 10, 12);
+    const [first, second] = await Promise.all([
+      etfFlowsSource.fetch(briefingDate),
+      etfFlowsSource.fetch(briefingDate),
+    ]);
+    const cached = await etfFlowsSource.fetch(briefingDate);
+
+    expect(first).toEqual(second);
+    expect(cached).toEqual(first);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
 
