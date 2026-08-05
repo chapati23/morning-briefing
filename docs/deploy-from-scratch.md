@@ -242,12 +242,12 @@ store. The Terraform-managed secret value cannot be recovered after deletion.
 
 To roll back this removal exactly:
 
-1. Create a rollback branch at the exact release immediately before the
-   integration was removed. This rolls back the entire removal release, including
-   its ETF-source change:
+1. Create a rollback branch at the immutable `main` commit immediately before
+   the integration was removed. This rolls back the entire removal release,
+   including its ETF-source change:
 
    ```bash
-   git switch -c rollback/opensea-voyages f4bf0ab^
+   git switch -c rollback/opensea-voyages 5117bb68b3d5cae4d8982c93f0738a30a769caec
    ```
 
 2. Restore these local values from the approved secret store (do not commit
