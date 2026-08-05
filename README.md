@@ -32,6 +32,9 @@ cd terraform && make deploy
 See [docs/deploy-from-scratch.md](docs/deploy-from-scratch.md) for detailed
 instructions.
 
+Dependency security pins and package patches are maintained in
+[docs/dependency-security.md](docs/dependency-security.md).
+
 ## Local Development
 
 ```bash

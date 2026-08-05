@@ -231,6 +231,65 @@ schedule_cron = "0 7 * * *"          # 7:00 AM daily (adjust as needed)
 
 ## Step 5: Deploy to GCP
 
+### AgentMail secret removal in this release
+
+This release removes the retired OpenSea Voyages integration. Applying its
+Terraform plan **destructively deletes** the `agentmail-api-key` Secret Manager
+secret, all of its secret versions, the Cloud Run accessor IAM binding, and the
+AgentMail environment variables on Cloud Run. Before applying, store both the
+current AgentMail API key and `AGENTMAIL_EMAIL_ADDRESS` in an approved secret
+store. The Terraform-managed secret value cannot be recovered after deletion.
+
+To roll back this removal exactly:
+
+1. Create a rollback branch at the exact release immediately before the
+   integration was removed. This rolls back the entire removal release, including
+   its ETF-source change:
+
+   ```bash
+   git switch -c rollback/opensea-voyages f4bf0ab^
+   ```
+
+2. Restore these local values from the approved secret store (do not commit
+   `.env.local`):
+
+   ```dotenv
+   AGENTMAIL_API_KEY=<restored-key>
+   AGENTMAIL_EMAIL_ADDRESS=<restored-inbox-address>
+   ```
+
+3. Rebuild that release and recreate the Terraform-managed secret, secret
+   version, IAM binding, and Cloud Run environment variables:
+
+   ```bash
+   cd terraform
+   make init
+   make plan
+   # Confirm the plan creates agentmail-api-key and does not destroy unrelated resources.
+   make deploy
+   ```
+
+4. Verify the restored secret and both Cloud Run environment variables without
+   printing the secret value:
+
+   ```bash
+   PROJECT_ID="$(terraform output -raw project_id)"
+   REGION="$(terraform output -raw region)"
+   gcloud secrets versions access latest \
+     --secret=agentmail-api-key \
+     --project="$PROJECT_ID" >/dev/null
+   gcloud run services describe morning-briefing \
+     --project="$PROJECT_ID" \
+     --region="$REGION" \
+     --format=json \
+     | jq -e '[.spec.template.spec.containers[0].env[].name] \
+       | contains(["AGENTMAIL_API_KEY", "AGENTMAIL_EMAIL_ADDRESS"])' >/dev/null
+   ```
+
+The first command intentionally discards the secret value and only verifies
+access. If the removal has not been applied yet, aborting the plan is safer than
+destroying and recreating the secret.
+
 Use the Makefile for simple commands that automatically load secrets from `.env.local`:
 
 ```bash
