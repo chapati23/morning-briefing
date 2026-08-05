@@ -13,6 +13,7 @@ import {
   type MarketImplication,
 } from "../config/polymarket-correlations";
 import type { BriefingItem, BriefingSection, DataSource } from "../types";
+import { isWeekend } from "./economic-calendar";
 
 const POLYMARKET_API = "https://gamma-api.polymarket.com";
 
@@ -31,6 +32,10 @@ const CONFIG = {
   // Output limits
   maxMovers: 5,
   maxTopMarkets: 5,
+  maxOddsShifts: 3,
+
+  // Minimum volume for odds shifts (filters out noise from tiny markets)
+  minOddsShiftVolume: 50_000,
 
   // API fetch limit
   fetchLimit: 200,
@@ -46,7 +51,7 @@ export interface TopOutcome {
   readonly change: number; // 24h change as decimal (0.10 = 10%)
 }
 
-interface ParsedMarket {
+export interface ParsedMarket {
   readonly id: string;
   readonly title: string;
   readonly slug: string;
@@ -62,9 +67,11 @@ interface ParsedMarket {
   readonly url: string;
   readonly isMultiMarket: boolean;
   readonly topOutcomes?: readonly TopOutcome[];
+  /** Largest absolute 24h change across all outcomes (for multi-market events) */
+  readonly maxAbsDayChange: number;
 }
 
-interface ClassifiedMarket extends ParsedMarket {
+export interface ClassifiedMarket extends ParsedMarket {
   readonly isMover: boolean;
   readonly implications: readonly MarketImplication[];
 }
@@ -106,9 +113,7 @@ export const polymarketMoversSource: DataSource = {
 
     const movers = classified
       .filter((m) => m.isMover)
-      .sort(
-        (a, b) => Math.abs(b.oneDayPriceChange) - Math.abs(a.oneDayPriceChange),
-      )
+      .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange)
       .slice(0, CONFIG.maxMovers);
 
     if (movers.length === 0) {
@@ -130,12 +135,19 @@ export const polymarketMoversSource: DataSource = {
 
 /**
  * Polymarket Top Markets - High-volume markets to monitor.
+ * Weekend only — provides a big-picture overview of top markets by total volume.
+ * On weekdays, the Odds Shifts section replaces this with more actionable data.
  */
 export const polymarketTopMarketsSource: DataSource = {
   name: "Polymarket Top Markets",
   priority: 6, // After movers
 
-  fetch: async (): Promise<BriefingSection> => {
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Only show on weekends; weekdays get Odds Shifts instead
+    if (!isWeekend(date)) {
+      return { title: "Polymarket Top Markets", icon: "🎯", items: [] };
+    }
+
     const classified = await getClassifiedMarkets();
 
     const topMarkets = classified
@@ -159,6 +171,51 @@ export const polymarketTopMarketsSource: DataSource = {
   },
 };
 
+/**
+ * Polymarket Odds Shifts - Markets with the biggest 24h probability changes.
+ * Weekday only — surfaces the top 3 markets by absolute odds movement,
+ * filtered to ≥$50K volume to avoid noise from tiny markets.
+ * On weekends, Top Markets replaces this with a big-picture view.
+ */
+export const polymarketOddsShiftsSource: DataSource = {
+  name: "Polymarket Odds Shifts",
+  priority: 5.5, // Between movers (5) and top markets (6)
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Only show on weekdays; weekends get Top Markets instead
+    if (isWeekend(date)) {
+      return { title: "Polymarket Odds Shifts", icon: "🔀", items: [] };
+    }
+
+    const classified = await getClassifiedMarkets();
+
+    const shifts = classified
+      // Exclude markets already shown as movers
+      .filter((m) => !m.isMover)
+      // Volume filter to avoid noise
+      .filter((m) => m.volume >= CONFIG.minOddsShiftVolume)
+      // Filter out markets with no meaningful change (< 1%)
+      .filter((m) => m.maxAbsDayChange >= 0.01)
+      // Sort by biggest absolute 24h change (use maxAbsDayChange for multi-market events)
+      .sort((a, b) => b.maxAbsDayChange - a.maxAbsDayChange)
+      .slice(0, CONFIG.maxOddsShifts);
+
+    if (shifts.length === 0) {
+      return {
+        title: "Polymarket Odds Shifts",
+        icon: "🔀",
+        items: [{ text: "Quiet day — no significant odds shifts" }],
+      };
+    }
+
+    return {
+      title: "Polymarket Odds Shifts",
+      icon: "🔀",
+      items: shifts.map(formatOddsShiftItem),
+    };
+  },
+};
+
 // ============================================================================
 // API Client
 // ============================================================================
@@ -173,7 +230,7 @@ interface GammaEvent {
   markets: GammaMarket[];
 }
 
-interface GammaMarket {
+export interface GammaMarket {
   id: string;
   question: string;
   slug: string;
@@ -189,6 +246,8 @@ interface GammaMarket {
   oneHourPriceChange: number;
   oneWeekPriceChange: number;
   lastTradePrice: number;
+  /** Structured outcome label for multi-market events (e.g. "Kevin Warsh", "Somalia") */
+  groupItemTitle?: string;
 }
 
 const fetchAndParseMarkets = async (): Promise<ParsedMarket[]> => {
@@ -261,18 +320,32 @@ export const extractOutcomeName = (question: string): string => {
     }
   }
 
-  // Pattern 2: Date-based questions "...by [Month] [Day]..."
-  const dateMatch = question.match(
-    /by\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i,
-  );
-  if (dateMatch?.[1] && dateMatch[2]) {
-    const month = dateMatch[1].slice(0, 3); // "February" -> "Feb"
-    return `${month} ${dateMatch[2]}`;
+  // Pattern 2: Numeric range questions "Will there be between X and Y..."
+  const rangeMatch = question.match(/between\s+(\d+)\s+and\s+(\d+)/i);
+  if (rangeMatch?.[1] && rangeMatch[2]) {
+    return `${rangeMatch[1]}-${rangeMatch[2]}`;
   }
 
-  // Pattern 3: Person names "Will [Name] win/be/become..."
+  // Pattern 2b: "X or fewer" / "X or more" quantity thresholds
+  const thresholdMatch = question.match(/(\d+)\s+or\s+(fewer|more|less)/i);
+  if (thresholdMatch?.[1] && thresholdMatch[2]) {
+    const op = thresholdMatch[2] === "more" ? "+" : "≤";
+    return op === "+" ? `${thresholdMatch[1]}+` : `≤${thresholdMatch[1]}`;
+  }
+
+  // Pattern 2c: Price/dollar targets "hit $120", "reach $50", "above $100"
+  const priceMatch = question.match(
+    /(?:hit|reach|above|below|over|under)\s+(?:\([^)]*\)\s*)?(\$[\d,.]+)/i,
+  );
+  if (priceMatch?.[1]) {
+    return priceMatch[1];
+  }
+
+  // Pattern 3: Person names "Will [Name] win/be/become/be named..."
+  // Skip "there" (e.g., "Will there be...") — not a person name
   const namePatterns = [
     /^Will\s+(.+?)\s+win\b/i,
+    /^Will\s+(.+?)\s+be\s+named\b/i,
     /^Will\s+(.+?)\s+be\b/i,
     /^Will\s+(.+?)\s+become\b/i,
     /nominate\s+(.+?)\s+as\b/i,
@@ -282,8 +355,8 @@ export const extractOutcomeName = (question: string): string => {
     const match = question.match(pattern);
     if (match?.[1]) {
       const fullName = match[1].trim();
-      // Skip if it looks like a date phrase
-      if (/^(the|a|an|us|uk)\b/i.test(fullName)) continue;
+      // Skip if it looks like a date phrase or a filler word
+      if (/^(the|a|an|us|uk|there)\b/i.test(fullName)) continue;
 
       // Return last word (usually last name) for brevity
       const parts = fullName.split(" ").filter((p) => p.length > 0);
@@ -295,7 +368,17 @@ export const extractOutcomeName = (question: string): string => {
     }
   }
 
-  // Pattern 4: Year-based "...in [Year]?"
+  // Pattern 4: Date-based questions "...by [Month] [Day]..."
+  // (lower priority than names — otherwise "by February 28" swallows person names)
+  const dateMatch = question.match(
+    /by\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})/i,
+  );
+  if (dateMatch?.[1] && dateMatch[2]) {
+    const month = dateMatch[1].slice(0, 3); // "February" -> "Feb"
+    return `${month} ${dateMatch[2]}`;
+  }
+
+  // Pattern 5: Year-based "...in [Year]?"
   const yearMatch = question.match(/in\s+(202\d)/);
   if (yearMatch?.[1]) {
     return yearMatch[1];
@@ -313,21 +396,29 @@ export const extractOutcomeName = (question: string): string => {
 /**
  * Extract top outcomes from a multi-market event.
  */
-const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
-  const sorted = markets
-    .map((m) => ({
-      name: extractOutcomeName(m.question),
-      probability: m.lastTradePrice * 100,
-      change: m.oneDayPriceChange,
-    }))
-    // Filter out completely dead (0%) and fully resolved (100%) outcomes
+export const extractTopOutcomes = (markets: GammaMarket[]): TopOutcome[] => {
+  const mapped = markets.map((m) => ({
+    name: m.groupItemTitle?.trim() || extractOutcomeName(m.question),
+    probability: m.lastTradePrice * 100,
+    change: m.oneDayPriceChange,
+  }));
+
+  // Filter out completely dead (0%) and fully resolved (100%) outcomes
+  const filtered = mapped
     .filter((o) => o.probability > 0.5 && o.probability < 99.5)
     .sort((a, b) => b.probability - a.probability);
 
-  if (sorted.length === 0) return [];
+  if (filtered.length > 0) {
+    return filtered.slice(0, 2);
+  }
 
-  // Return top 2 outcomes
-  return sorted.slice(0, 2);
+  // Fallback: all outcomes are fully resolved (e.g. date-based market where event happened).
+  // Show the 2 highest-probability outcomes — these reveal WHEN the event occurred.
+  const fallback = mapped
+    .filter((o) => o.probability > 0 && o.probability < 100)
+    .sort((a, b) => b.probability - a.probability);
+
+  return fallback.slice(0, 2);
 };
 
 const parseMarket = (
@@ -364,6 +455,14 @@ const parseMarket = (
         ? topOutcomes[0].probability
         : probability;
 
+    // Compute the maximum absolute 24h change across all outcomes
+    const maxAbsDayChange = isMultiMarket
+      ? Math.max(
+          ...event.markets.map((m) => Math.abs(m.oneDayPriceChange)),
+          Math.abs(market.oneDayPriceChange),
+        )
+      : Math.abs(market.oneDayPriceChange);
+
     return {
       id: market.id,
       // Use event title for display since URL points to event page
@@ -386,6 +485,7 @@ const parseMarket = (
       url: `https://polymarket.com/event/${event.slug}`,
       isMultiMarket,
       topOutcomes,
+      maxAbsDayChange,
     };
   } catch {
     return null;
@@ -396,8 +496,9 @@ const parseMarket = (
 // Classification
 // ============================================================================
 
-const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
-  const dayChange = Math.abs(market.oneDayPriceChange);
+export const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
+  // For multi-market events, use the max change across all outcomes (not just the primary market)
+  const dayChange = market.maxAbsDayChange;
 
   // For daily briefing, focus on 24h changes (not hourly)
   // This avoids showing markets with large hour change but tiny day change
@@ -417,16 +518,27 @@ const classifyMarket = (market: ParsedMarket): ClassifiedMarket => {
 // ============================================================================
 
 /**
+ * Returns a color emoji based on the magnitude and direction of a percentage change.
+ * @param changePct - Change as a percentage (e.g. 5 for 5%, -12 for -12%)
+ */
+export const changeEmoji = (changePct: number): string => {
+  if (!Number.isFinite(changePct) || Math.abs(changePct) < 1) return "⚪";
+  if (changePct >= 10) return "🚀";
+  if (changePct >= 1) return "🟢";
+  if (changePct <= -10) return "🚨";
+  return "🔴";
+};
+
+/**
  * Format a single outcome with its change indicator.
  */
 export const formatOutcomeWithChange = (outcome: TopOutcome): string => {
   const changePct = outcome.change * 100;
+  const emoji = changeEmoji(changePct);
   if (!Number.isFinite(changePct) || Math.abs(changePct) < 1) {
-    // No significant change or invalid data
-    return `${outcome.name} — ${outcome.probability.toFixed(0)}%`;
+    return `${emoji} ${outcome.name} — ${outcome.probability.toFixed(0)}%`;
   }
-  const arrow = changePct >= 0 ? "↑" : "↓";
-  return `${outcome.name} — ${outcome.probability.toFixed(0)}% (${arrow}${Math.abs(changePct).toFixed(0)}%)`;
+  return `${emoji} ${outcome.name} — ${outcome.probability.toFixed(0)}% (${changePct >= 0 ? "↑" : "↓"}${Math.abs(changePct).toFixed(0)}%)`;
 };
 
 const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
@@ -451,7 +563,8 @@ const formatMoverItem = (market: ClassifiedMarket): BriefingItem => {
     const dayChangePct = market.oneDayPriceChange * 100;
     const prevProb = market.probability - dayChangePct;
     const sign = dayChangePct >= 0 ? "+" : "";
-    detail = `${prevProb.toFixed(0)}% → ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}%) | ${vol}`;
+    const emoji = changeEmoji(dayChangePct);
+    detail = `${emoji} ${prevProb.toFixed(0)}% → ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}%) | ${vol}`;
   }
 
   // Add trading implications as separate line if available
@@ -509,6 +622,36 @@ const formatTopMarketItem = (market: ClassifiedMarket): BriefingItem => {
   };
 };
 
+const formatOddsShiftItem = (market: ClassifiedMarket): BriefingItem => {
+  const vol = formatVolume(market.volume);
+
+  let detail: string;
+
+  if (
+    market.isMultiMarket &&
+    market.topOutcomes &&
+    market.topOutcomes.length > 0
+  ) {
+    // Multi-market: show top 2 outcomes with their changes
+    const rankings = market.topOutcomes
+      .map((o, i) => `${i + 1}. ${formatOutcomeWithChange(o)}`)
+      .join("\n");
+    detail = `${rankings}\n${vol} volume`;
+  } else {
+    // Binary: show the odds shift
+    const dayChangePct = market.oneDayPriceChange * 100;
+    const sign = dayChangePct >= 0 ? "+" : "";
+    const emoji = changeEmoji(dayChangePct);
+    detail = `${emoji} ${market.probability.toFixed(0)}% (${sign}${dayChangePct.toFixed(0)}pp 24h) | ${vol}`;
+  }
+
+  return {
+    text: truncate(market.title, 70),
+    url: market.url,
+    detail,
+  };
+};
+
 export const formatVolume = (volume: number): string => {
   if (volume >= 1_000_000) {
     return `$${(volume / 1_000_000).toFixed(1)}M`;
@@ -539,7 +682,7 @@ export const mockPolymarketMoversSource: DataSource = {
       {
         text: "US/Israel strikes Iran by...?",
         detail:
-          "1. Feb 28 — 42% (↓8%)\n2. Mar 31 — 35% (↓5%)\n$12.5M volume\n↑USO ↑XLE ↑LMT",
+          "1. 🔴 Feb 28 — 42% (↓8%)\n2. 🔴 Mar 31 — 35% (↓5%)\n$12.5M volume\n↑USO ↑XLE ↑LMT",
         sentiment: "negative",
         url: "https://polymarket.com/event/us-israel-strikes-iran",
       },
@@ -558,28 +701,65 @@ export const mockPolymarketTopMarketsSource: DataSource = {
   name: "Polymarket Top Markets",
   priority: 6,
 
-  fetch: async (): Promise<BriefingSection> => ({
-    title: "Polymarket Top Markets",
-    icon: "🎯",
-    items: [
-      {
-        text: "Democratic Presidential Nominee 2028",
-        detail: "1. Newsom — 33% (↓3%)\n2. AOC — 9% (↑2%)\n$586M volume",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/democratic-presidential-nominee-2028",
-      },
-      {
-        text: "Presidential Election Winner 2028",
-        detail: "1. Vance — 26%\n2. Newsom — 19%\n$245M volume",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/presidential-election-winner-2028",
-      },
-      {
-        text: "US recession in 2026",
-        detail: "28% | $8M | +5% 7d",
-        sentiment: "neutral",
-        url: "https://polymarket.com/event/us-recession-2026",
-      },
-    ],
-  }),
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Respect weekend-only behavior in mock too
+    if (!isWeekend(date)) {
+      return { title: "Polymarket Top Markets", icon: "🎯", items: [] };
+    }
+    return {
+      title: "Polymarket Top Markets",
+      icon: "🎯",
+      items: [
+        {
+          text: "Democratic Presidential Nominee 2028",
+          detail:
+            "1. 🔴 Newsom — 33% (↓3%)\n2. 🟢 AOC — 9% (↑2%)\n$586M volume",
+          url: "https://polymarket.com/event/democratic-presidential-nominee-2028",
+        },
+        {
+          text: "Presidential Election Winner 2028",
+          detail: "1. Vance — 26%\n2. Newsom — 19%\n$245M volume",
+          url: "https://polymarket.com/event/presidential-election-winner-2028",
+        },
+        {
+          text: "US recession in 2026",
+          detail: "28% | $8M | +5% 7d",
+          url: "https://polymarket.com/event/us-recession-2026",
+        },
+      ],
+    };
+  },
+};
+
+export const mockPolymarketOddsShiftsSource: DataSource = {
+  name: "Polymarket Odds Shifts",
+  priority: 5.5,
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    // Respect weekday-only behavior in mock too
+    if (isWeekend(date)) {
+      return { title: "Polymarket Odds Shifts", icon: "🔀", items: [] };
+    }
+    return {
+      title: "Polymarket Odds Shifts",
+      icon: "🔀",
+      items: [
+        {
+          text: "Will the US enter a recession in 2026?",
+          detail: "34% (+6pp 24h) | $8.2M",
+          url: "https://polymarket.com/event/us-recession-2026",
+        },
+        {
+          text: "Next Fed rate cut by June 2026?",
+          detail: "72% (+4pp 24h) | $3.1M",
+          url: "https://polymarket.com/event/fed-rate-cut-june-2026",
+        },
+        {
+          text: "Trump tariffs on EU by April?",
+          detail: "58% (-3pp 24h) | $1.8M",
+          url: "https://polymarket.com/event/trump-eu-tariffs",
+        },
+      ],
+    };
+  },
 };

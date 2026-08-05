@@ -37,8 +37,6 @@ variable "schedule_cron" {
   type        = string
   default     = "0 7 * * *" # 7:00 AM daily
 }
-
-
 variable "artifact_registry_kms_key_id" {
   description = "Optional KMS key ID for Artifact Registry CMEK encryption. Format: projects/{project}/locations/{location}/keyRings/{keyRing}/cryptoKeys/{key}"
   type        = string

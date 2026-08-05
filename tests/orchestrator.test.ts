@@ -67,10 +67,16 @@ describe("runBriefing", () => {
 
     const briefing = await runBriefing(sources, new Date());
 
-    expect(briefing.sections).toHaveLength(1);
+    expect(briefing.sections).toHaveLength(2); // success section + Source Failures section
     expect(briefing.failures).toHaveLength(1);
     expect(briefing.failures[0]?.source).toBe("Failure");
     expect(briefing.failures[0]?.error).toBe("Network error");
+    const failureSection = briefing.sections.find(
+      (s) => s.title === "⚠️ Source Failures",
+    );
+    expect(failureSection?.items).toHaveLength(1);
+    expect(failureSection?.items[0]?.text).toContain("Failure");
+    expect(failureSection?.items[0]?.text).toContain("Network error");
   });
 
   it("should handle all sources failing", async () => {
@@ -81,7 +87,9 @@ describe("runBriefing", () => {
 
     const briefing = await runBriefing(sources, new Date());
 
-    expect(briefing.sections).toHaveLength(0);
+    expect(briefing.sections).toHaveLength(1);
+    expect(briefing.sections[0]?.title).toBe("⚠️ Source Failures");
+    expect(briefing.sections[0]?.items).toHaveLength(2);
     expect(briefing.failures).toHaveLength(2);
   });
 
@@ -94,9 +102,13 @@ describe("runBriefing", () => {
     // Use 100ms timeout
     const briefing = await runBriefing(sources, new Date(), 100);
 
-    expect(briefing.sections).toHaveLength(1);
+    expect(briefing.sections).toHaveLength(2); // Fast + Source Failures
     expect(briefing.failures).toHaveLength(1);
     expect(briefing.failures[0]?.error).toContain("timed out");
+    const failureSection = briefing.sections.find(
+      (s) => s.title === "⚠️ Source Failures",
+    );
+    expect(failureSection?.items[0]?.text).toContain("timed out");
   });
 
   it("should include date and generatedAt in briefing", async () => {
@@ -131,6 +143,43 @@ describe("runBriefing", () => {
     expect(briefing.sections[0]?.title).toBe("High Priority");
     expect(briefing.sections[1]?.title).toBe("Medium Priority");
     expect(briefing.sections[2]?.title).toBe("Low Priority");
+  });
+
+  it("should sort multi-section sources by source priority even when titles differ", async () => {
+    const sources = [
+      {
+        name: "Crypto News",
+        priority: 9,
+        fetch: async () => ({
+          title: "Crypto News",
+          icon: "📰",
+          items: [{ text: "News item" }],
+        }),
+      },
+      {
+        name: "App Store Rankings",
+        priority: 7,
+        fetch: async () => [
+          {
+            title: "App Store · Finance",
+            icon: "📱",
+            items: [{ text: "Finance rank" }],
+          },
+          {
+            title: "App Store · Total",
+            icon: "📱",
+            items: [{ text: "Total rank" }],
+          },
+        ],
+      },
+    ];
+
+    const briefing = await runBriefing(sources, new Date());
+
+    expect(briefing.sections).toHaveLength(3);
+    expect(briefing.sections[0]?.title).toBe("App Store · Finance");
+    expect(briefing.sections[1]?.title).toBe("App Store · Total");
+    expect(briefing.sections[2]?.title).toBe("Crypto News");
   });
 
   it("should exclude sections with empty items array", async () => {
@@ -327,7 +376,8 @@ describe("runFullBriefing", () => {
 
     const briefing = await runFullBriefing(sources, [channel]);
 
-    expect(briefing.sections).toHaveLength(0);
+    expect(briefing.sections).toHaveLength(1);
+    expect(briefing.sections[0]?.title).toBe("⚠️ Source Failures");
     expect(briefing.failures).toHaveLength(1);
     // Channel should still be called with the (partially failed) briefing
     expect(sendMock).toHaveBeenCalledTimes(1);

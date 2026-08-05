@@ -70,7 +70,6 @@ src/
 │   ├── overnight-futures.ts
 │   ├── economic-calendar.ts
 │   ├── appstore-rankings.ts
-│   ├── daily-degen.ts
 │   └── polymarket.ts
 ├── channels/
 │   └── telegram.ts   # Telegram formatting + delivery

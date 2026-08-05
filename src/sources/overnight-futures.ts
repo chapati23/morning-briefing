@@ -25,6 +25,7 @@ interface FuturesContract {
 }
 
 const FUTURES: readonly FuturesContract[] = [
+  { symbol: "BTC=F", name: "BTC", description: "Bitcoin" },
   { symbol: "ES=F", name: "ES", description: "S&P 500" },
   { symbol: "NQ=F", name: "NQ", description: "Nasdaq 100" },
   { symbol: "GC=F", name: "GC", description: "Gold" },
@@ -221,7 +222,7 @@ export const buildFuturesItem = (
     const paddedPercent = formatPercent(changePercent).padStart(widths.percent);
     return {
       text: `${label} ${paddedPercent} / ${paddedPrice}`,
-      sentiment: getSentiment(changePercent),
+      sentiment: getSentiment(changePercent, contract.symbol),
       monospace: true,
     };
   }
@@ -249,10 +250,47 @@ export const formatPrice = (value: number): string =>
     maximumFractionDigits: 2,
   });
 
-export const getSentiment = (changePercent: number): Sentiment => {
-  if (changePercent > 0) return "positive";
-  if (changePercent < 0) return "negative";
-  return "neutral";
+/**
+ * Per-asset volatility thresholds.
+ * - flat: moves within this range are ⚪ neutral
+ * - big: moves beyond this are 🚀/🚨 (strong_positive/strong_negative)
+ * - in between: 🟢/🔴 (positive/negative)
+ */
+interface AssetThresholds {
+  readonly flat: number;
+  readonly big: number;
+}
+
+const ASSET_THRESHOLDS: Record<string, AssetThresholds> = {
+  "BTC=F": { flat: 0.5, big: 5 }, // Bitcoin — volatile, 5% is a big day
+  "ES=F": { flat: 0.05, big: 1 }, // S&P 500 — 1% is a big day
+  "NQ=F": { flat: 0.1, big: 1.5 }, // Nasdaq — slightly more volatile
+  "GC=F": { flat: 0.1, big: 1.5 }, // Gold
+  "SI=F": { flat: 0.2, big: 2.5 }, // Silver — more volatile than gold
+  "HG=F": { flat: 0.15, big: 2 }, // Copper
+  "CL=F": { flat: 0.2, big: 3 }, // Crude Oil
+  "NG=F": { flat: 0.5, big: 5 }, // Natural Gas — extremely volatile
+  "ZN=F": { flat: 0.02, big: 0.5 }, // 10Y Treasury — very low vol
+  "DX-Y.NYB": { flat: 0.05, big: 0.5 }, // Dollar Index — low vol
+  "6E=F": { flat: 0.05, big: 0.7 }, // Euro FX
+};
+
+const DEFAULT_THRESHOLDS: AssetThresholds = { flat: 0.1, big: 1.5 };
+
+export const getSentiment = (
+  changePercent: number,
+  symbol?: string,
+): Sentiment => {
+  const absChange = Math.abs(changePercent);
+  const thresholds =
+    (symbol ? ASSET_THRESHOLDS[symbol] : undefined) ?? DEFAULT_THRESHOLDS;
+
+  if (absChange <= thresholds.flat) return "neutral";
+
+  if (changePercent > 0) {
+    return absChange >= thresholds.big ? "strong_positive" : "positive";
+  }
+  return absChange >= thresholds.big ? "strong_negative" : "negative";
 };
 
 // ============================================================================
@@ -270,6 +308,11 @@ export const mockOvernightFuturesSource: DataSource = {
       title: `Overnight Futures (since ${formatTradingDate(tradingDate)} close)`,
       icon: "📈",
       items: [
+        {
+          text: "BTC: +5.23% / 98,765.00",
+          sentiment: "strong_positive",
+          monospace: true,
+        },
         {
           text: "ES:  +0.45% /  5,432.25",
           sentiment: "positive",
@@ -302,7 +345,7 @@ export const mockOvernightFuturesSource: DataSource = {
         },
         {
           text: "NG:  -1.45% /      2.34",
-          sentiment: "negative",
+          sentiment: "neutral",
           monospace: true,
         },
         {

@@ -254,7 +254,7 @@ const computeAppTrends = (
 // Formatting (exported for testing)
 // ============================================================================
 
-/** Format a rank number for display (e.g., "#35" or "unranked"). */
+/** Format a rank number for display (e.g., "#35" or "#101+"). */
 const formatRank = (rank: number | null): string =>
   rank === null ? "unranked" : `#${rank}`;
 
@@ -334,20 +334,33 @@ const computeOverallAppTrends = (
   ),
 });
 
-/** Build Finance-category BriefingItems — only apps ranked in Finance, sorted by rank. */
+/** Build Finance-category BriefingItems — all tracked apps, sorted by rank. */
 const buildFinanceItems = (
   snapshot: DailySnapshot,
   history: RankingsHistory,
   referenceDate: Date,
 ): readonly BriefingItem[] => {
   interface ItemWithRank {
-    readonly rank: number;
+    readonly rank: number | null;
     readonly item: BriefingItem;
   }
 
   return TRACKED_APPS.flatMap((app): ItemWithRank[] => {
     const ranking = snapshot[app.bundleId] ?? { overall: null, finance: null };
-    if (ranking.finance === null) return [];
+
+    // Include all apps — ranked or unranked
+    const rank = ranking.finance; // null = unranked
+
+    // For unranked apps, skip trend computation (meaningless) and sentiment
+    if (rank === null) {
+      const text = `${app.name}: ${formatRank(null)}`;
+      return [
+        {
+          rank,
+          item: { text, sentiment: undefined, sentimentPrefix: true },
+        },
+      ];
+    }
 
     const trends = computeAppTrends(
       history,
@@ -357,17 +370,17 @@ const buildFinanceItems = (
     );
     const trendLine = formatTrendLine(trends);
     const text = trendLine
-      ? `${formatFinancePositionText(app, ranking.finance)} (${trendLine})`
-      : formatFinancePositionText(app, ranking.finance);
+      ? `${formatFinancePositionText(app, rank)} (${trendLine})`
+      : formatFinancePositionText(app, rank);
 
     return [
       {
-        rank: ranking.finance,
+        rank,
         item: { text, sentiment: getSentiment(trends), sentimentPrefix: true },
       },
     ];
   })
-    .sort((a, b) => a.rank - b.rank)
+    .sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
     .map(({ item }) => item);
 };
 
@@ -484,10 +497,12 @@ export const mockAppStoreRankingsSource: DataSource = {
         {
           text: "Coinbase: #12 (↑5 daily · ↑12 weekly · ↑25 monthly)",
           sentiment: "positive",
+          sentimentPrefix: true,
         },
         {
-          text: "Polymarket: #128 (↓46 daily · ↓42 weekly)",
-          sentiment: "negative",
+          text: "Polymarket: unranked",
+          sentiment: undefined,
+          sentimentPrefix: true,
         },
       ],
     },

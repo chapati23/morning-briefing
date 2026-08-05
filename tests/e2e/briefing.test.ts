@@ -53,7 +53,7 @@ describe("Full Briefing Pipeline", () => {
 
       const briefing = await runFullBriefing(sources, []);
 
-      expect(briefing.sections).toHaveLength(1);
+      expect(briefing.sections).toHaveLength(2); // Working Source + Source Failures
       expect(briefing.sections[0]?.title).toBe("Working Source");
       expect(briefing.failures).toHaveLength(1);
       expect(briefing.failures[0]?.source).toBe("Broken Source");
@@ -67,7 +67,9 @@ describe("Full Briefing Pipeline", () => {
 
       const briefing = await runFullBriefing(sources, []);
 
-      expect(briefing.sections).toHaveLength(0);
+      expect(briefing.sections).toHaveLength(1);
+      expect(briefing.sections[0]?.title).toBe("⚠️ Source Failures");
+      expect(briefing.sections[0]?.items).toHaveLength(2);
       expect(briefing.failures).toHaveLength(2);
     });
   });
@@ -329,14 +331,14 @@ describe("Realistic Briefing Scenarios", () => {
       [channel],
     );
 
-    // Should have one section and one failure
-    expect(briefing.sections).toHaveLength(1);
+    // Should have Economic Calendar section + Source Failures section
+    expect(briefing.sections).toHaveLength(2);
     expect(briefing.failures).toHaveLength(1);
     expect(briefing.failures[0]?.source).toBe("ETF Flows");
 
     // Formatting should include failure notice
     const formatted = formatBriefingForTelegram(briefing);
-    expect(formatted).toContain("Failed Sources");
+    expect(formatted).toContain("Source Failures");
     expect(formatted).toContain("ETF Flows");
   });
 });

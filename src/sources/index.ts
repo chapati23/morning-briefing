@@ -7,8 +7,6 @@
 import { config } from "../config";
 import type { DataSource } from "../types";
 
-// Import sources
-import { dailyDegenNewsSource, mockDailyDegenNewsSource } from "./daily-degen";
 import {
   economicCalendarSource,
   mockEconomicCalendarSource,
@@ -23,9 +21,15 @@ import {
   mockAppStoreRankingsSource,
 } from "./appstore-rankings";
 import {
+  congressTradesSource,
+  mockCongressTradesSource,
+} from "./congress-trades";
+import {
   mockPolymarketMoversSource,
+  mockPolymarketOddsShiftsSource,
   mockPolymarketTopMarketsSource,
   polymarketMoversSource,
+  polymarketOddsShiftsSource,
   polymarketTopMarketsSource,
 } from "./polymarket";
 
@@ -35,23 +39,25 @@ import {
 
 // All available sources - add new ones here
 const getRealSources = (): DataSource[] => [
-  dailyDegenNewsSource,
   etfFlowsSource,
   overnightFuturesSource,
   economicCalendarSource,
   polymarketMoversSource,
+  polymarketOddsShiftsSource,
   polymarketTopMarketsSource,
   appStoreRankingsSource,
+  congressTradesSource,
 ];
 
 const getMockSources = (): DataSource[] => [
-  mockDailyDegenNewsSource,
   mockETFFlowsSource,
   mockOvernightFuturesSource,
   mockEconomicCalendarSource,
   mockPolymarketMoversSource,
+  mockPolymarketOddsShiftsSource,
   mockPolymarketTopMarketsSource,
   mockAppStoreRankingsSource,
+  mockCongressTradesSource,
 ];
 
 const ALL_SOURCES = (): DataSource[] => {

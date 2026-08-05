@@ -70,18 +70,42 @@ describe("formatPrice", () => {
 // ============================================================================
 
 describe("getSentiment", () => {
-  it("returns positive for gains", () => {
+  it("returns positive for small gains", () => {
     expect(getSentiment(0.45)).toBe("positive");
-    expect(getSentiment(0.01)).toBe("positive");
+    expect(getSentiment(0.2)).toBe("positive");
   });
 
-  it("returns negative for losses", () => {
+  it("returns strong_positive for big gains", () => {
+    expect(getSentiment(2)).toBe("strong_positive");
+    expect(getSentiment(1.5)).toBe("strong_positive"); // default threshold
+  });
+
+  it("returns strong_positive with per-asset threshold", () => {
+    expect(getSentiment(1, "ES=F")).toBe("strong_positive"); // ES threshold = 1.0
+    expect(getSentiment(0.5, "ZN=F")).toBe("strong_positive"); // ZN threshold = 0.5
+  });
+
+  it("returns negative for small losses", () => {
     expect(getSentiment(-0.23)).toBe("negative");
-    expect(getSentiment(-0.01)).toBe("negative");
+    expect(getSentiment(-0.2)).toBe("negative");
   });
 
-  it("returns neutral for flat", () => {
+  it("returns strong_negative for big losses", () => {
+    expect(getSentiment(-2)).toBe("strong_negative");
+    expect(getSentiment(-1, "ES=F")).toBe("strong_negative");
+  });
+
+  it("returns neutral for flat (within default ±0.1%)", () => {
     expect(getSentiment(0)).toBe("neutral");
+    expect(getSentiment(0.05)).toBe("neutral");
+    expect(getSentiment(-0.08)).toBe("neutral");
+    expect(getSentiment(0.1)).toBe("neutral"); // boundary = flat
+  });
+
+  it("returns neutral for flat with per-asset threshold", () => {
+    expect(getSentiment(0.4, "BTC=F")).toBe("neutral"); // BTC flat = 0.5
+    expect(getSentiment(-0.3, "NG=F")).toBe("neutral"); // NG flat = 0.5
+    expect(getSentiment(0.01, "ZN=F")).toBe("neutral"); // ZN flat = 0.02
   });
 });
 
@@ -128,7 +152,7 @@ describe("buildFuturesItem", () => {
         defaultWidths,
       );
       expect(result.text).toBe("ES:  -1.27% /      2.34");
-      expect(result.sentiment).toBe("negative");
+      expect(result.sentiment).toBe("strong_negative");
     });
 
     it("handles zero change", () => {

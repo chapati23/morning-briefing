@@ -23,9 +23,11 @@ export interface BriefingSection {
 export interface BriefingItem {
   readonly text: string;
   readonly detail?: string;
+  readonly detailUrl?: string; // Optional link target for the detail line
   readonly time?: Date;
   readonly timePrefix?: string; // Short label shown before the time (e.g. "Wed")
   readonly url?: string;
+  readonly linkText?: string; // Optional substring of text to hyperlink instead of the whole line
   readonly calendarUrl?: string; // GCS URL for calendar ICS download
   readonly sentiment?: Sentiment;
   readonly monospace?: boolean; // Render text in fixed-width font (for alignment)
@@ -33,7 +35,12 @@ export interface BriefingItem {
   readonly paddingAfter?: boolean; // Always add a blank line after this item (even without detail)
 }
 
-export type Sentiment = "positive" | "negative" | "neutral";
+export type Sentiment =
+  | "positive"
+  | "negative"
+  | "neutral"
+  | "strong_positive"
+  | "strong_negative";
 
 // ============================================================================
 // Briefing Output Types

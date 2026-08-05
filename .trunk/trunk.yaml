@@ -29,6 +29,17 @@ lint:
       paths:
         - node_modules/**
         - dist/**
+        - tests/fixtures/**
+    # Checkov scans all json/yaml/docker files by default.
+    # Scope it to actual IaC files only (terraform/, Dockerfile, .github/)
+    - linters: [checkov]
+      paths:
+        - "*.json"
+        - "*.yaml"
+        - "*.yml"
+        - src/**
+        - .cache/**
+        - tests/**
 actions:
   disabled:
     - trunk-check-pre-push # Disabled in favor of trunk-check-all-pre-push

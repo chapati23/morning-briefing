@@ -9,9 +9,11 @@ import {
   escapeUrlForMarkdown,
   formatBriefingForTelegram,
   formatSection,
+  formatTextWithLinkedSubstring,
   formatTextWithMonospace,
   formatTime,
   getSentimentEmoji,
+  isSafeLinkUrl,
 } from "../src/channels/telegram";
 import type { Briefing, BriefingSection } from "../src/types";
 
@@ -78,6 +80,24 @@ describe("escapeMarkdown", () => {
 
   it("handles plain text without special chars", () => {
     expect(escapeMarkdown("Hello World")).toBe("Hello World");
+  });
+});
+
+// ============================================================================
+// escapeUrlForMarkdown
+// ============================================================================
+
+describe("isSafeLinkUrl", () => {
+  it("allows https URLs", () => {
+    expect(isSafeLinkUrl("https://example.com/path")).toBe(true);
+  });
+
+  it("rejects javascript URLs", () => {
+    expect(isSafeLinkUrl("javascript:alert(1)")).toBe(false);
+  });
+
+  it("rejects invalid URLs", () => {
+    expect(isSafeLinkUrl("not a url")).toBe(false);
   });
 });
 
@@ -195,16 +215,54 @@ describe("formatTextWithMonospace", () => {
 });
 
 // ============================================================================
+// formatTextWithLinkedSubstring
+// ============================================================================
+
+describe("formatTextWithLinkedSubstring", () => {
+  it("links only the requested substring", () => {
+    expect(
+      formatTextWithLinkedSubstring(
+        "Rep. Nancy Pelosi sold NVDA",
+        "NVDA",
+        "https://www.tradingview.com/symbols/NVDA/",
+      ),
+    ).toBe(
+      "Rep\\. Nancy Pelosi sold [NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
+  });
+
+  it("falls back to whole-text link when substring is missing", () => {
+    expect(
+      formatTextWithLinkedSubstring(
+        "Rep. Nancy Pelosi sold NVDA",
+        "AAPL",
+        "https://www.tradingview.com/symbols/AAPL/",
+      ),
+    ).toBe(
+      "[Rep\\. Nancy Pelosi sold NVDA](https://www.tradingview.com/symbols/AAPL/)",
+    );
+  });
+});
+
+// ============================================================================
 // getSentimentEmoji
 // ============================================================================
 
 describe("getSentimentEmoji", () => {
+  it("returns rocket for strong_positive", () => {
+    expect(getSentimentEmoji("strong_positive")).toBe("🚀");
+  });
+
   it("returns green circle for positive", () => {
     expect(getSentimentEmoji("positive")).toBe("🟢");
   });
 
   it("returns red circle for negative", () => {
     expect(getSentimentEmoji("negative")).toBe("🔴");
+  });
+
+  it("returns siren for strong_negative", () => {
+    expect(getSentimentEmoji("strong_negative")).toBe("🚨");
   });
 
   it("returns ⚪ for neutral (flat/unchanged)", () => {
@@ -310,6 +368,27 @@ describe("formatSection", () => {
     expect(result).toContain("[Link item](https://example.com)");
   });
 
+  it("formats item with only a linked ticker substring", () => {
+    const section: BriefingSection = {
+      title: "Congress Trades",
+      icon: "🏛",
+      items: [
+        {
+          text: "Rep. Nancy Pelosi sold NVDA",
+          url: "https://www.tradingview.com/symbols/NVDA/",
+          linkText: "NVDA",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain(
+      "Rep\\. Nancy Pelosi sold [NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
+    expect(result).not.toContain(
+      "[Rep\\. Nancy Pelosi sold NVDA](https://www.tradingview.com/symbols/NVDA/)",
+    );
+  });
+
   it("formats ETF-style item with emoji on left and only value linked", () => {
     const section: BriefingSection = {
       title: "Test",
@@ -340,6 +419,41 @@ describe("formatSection", () => {
     };
     const result = formatSection(section);
     expect(result).toContain("_Detail line_");
+  });
+
+  it("formats linked detail line", () => {
+    const section: BriefingSection = {
+      title: "Test",
+      icon: "📊",
+      items: [
+        {
+          text: "Item",
+          detail: "$500K – $1M · traded Mar 18 · filed Apr 7",
+          detailUrl: "https://www.capitoltrades.com/trades/123",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain(
+      "_[$500K – $1M · traded Mar 18 · filed Apr 7](https://www.capitoltrades.com/trades/123)_",
+    );
+  });
+
+  it("does not link unsafe detail URLs", () => {
+    const section: BriefingSection = {
+      title: "Test",
+      icon: "📊",
+      items: [
+        {
+          text: "Item",
+          detail: "$500K – $1M · traded Mar 18 · filed Apr 7",
+          detailUrl: "javascript:alert(1)",
+        },
+      ],
+    };
+    const result = formatSection(section);
+    expect(result).toContain("_$500K – $1M · traded Mar 18 · filed Apr 7_");
+    expect(result).not.toContain("javascript:alert(1)");
   });
 
   it("formats item with multi-line detail", () => {
