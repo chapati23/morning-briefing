@@ -273,8 +273,9 @@ To roll back this removal exactly:
    printing the secret value:
 
    ```bash
-   PROJECT_ID="$(terraform output -raw project_id)"
-   REGION="$(terraform output -raw region)"
+   TF_OUTPUTS="$(make --silent output)"
+   PROJECT_ID="$(printf '%s\n' "$TF_OUTPUTS" | sed -n 's/^project_id = "\(.*\)"$/\1/p')"
+   REGION="$(printf '%s\n' "$TF_OUTPUTS" | sed -n 's/^region = "\(.*\)"$/\1/p')"
    gcloud secrets versions access latest \
      --secret=agentmail-api-key \
      --project="$PROJECT_ID" >/dev/null

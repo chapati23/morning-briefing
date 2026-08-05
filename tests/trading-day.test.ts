@@ -788,6 +788,42 @@ describe("etfFlowsSource", () => {
     expect(cached).toEqual(first);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("does not cache an older fallback record under the requested trading day", async () => {
+    process.env["DISABLE_CACHE"] = "false";
+    const apr14 = Date.UTC(2026, 3, 14) / 1000;
+    const apr15 = Date.UTC(2026, 3, 15) / 1000;
+    let requestCount = 0;
+    const fetchMock = mock(async () => {
+      requestCount += 1;
+      return new Response(
+        makePage(
+          requestCount === 1
+            ? {
+                [apr14]: { date: apr14, Bitcoin: 100_000_000 },
+              }
+            : {
+                [apr14]: { date: apr14, Bitcoin: 100_000_000 },
+                [apr15]: { date: apr15, Bitcoin: 200_000_000 },
+              },
+        ),
+      );
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const briefingDate = new Date(2026, 3, 16, 12);
+    const fallback = await etfFlowsSource.fetch(briefingDate);
+    const current = await etfFlowsSource.fetch(briefingDate);
+    const cached = await etfFlowsSource.fetch(briefingDate);
+    if (Array.isArray(fallback) || Array.isArray(current)) {
+      throw new TypeError("Expected one ETF section");
+    }
+
+    expect(fallback.title).toContain("Tue, Apr 14");
+    expect(current.title).toContain("Wed, Apr 15");
+    expect(cached).toEqual(current);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 // ============================================================================

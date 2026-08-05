@@ -368,7 +368,10 @@ const fetchETFFlows = async (tradingDate: Date): Promise<ETFFlowRecord> => {
 
   const request = fetchETFFlowRecord(maximumTimestamp)
     .then((record) => {
-      if (process.env["DISABLE_CACHE"] !== "true") {
+      if (
+        process.env["DISABLE_CACHE"] !== "true" &&
+        record.timestamp === maximumTimestamp
+      ) {
         etfFlowCache.set(cacheKey, {
           expiresAt: Date.now() + CACHE_TTL_MS,
           record,
