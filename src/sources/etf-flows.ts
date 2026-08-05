@@ -8,7 +8,6 @@
 import * as cheerio from "cheerio";
 import { backOff } from "exponential-backoff";
 import type { BriefingSection, DataSource } from "../types";
-import { withCache } from "../utils";
 
 const DEFILLAMA_ETF_URL = "https://defillama2.llamao.fi/etfs";
 const BTC_ETF_URL = "https://farside.co.uk/btc/";
@@ -23,9 +22,14 @@ const MAX_FUTURE_SKEW_SECONDS = 7 * 24 * 60 * 60;
 
 interface ETFFlowRecord {
   readonly timestamp: number;
-  readonly bitcoinUsd: number;
-  readonly ethereumUsd: number;
-  readonly solanaUsd: number;
+  readonly bitcoinUsd: number | undefined;
+  readonly ethereumUsd: number | undefined;
+  readonly solanaUsd: number | undefined;
+}
+
+interface ETFFlowCacheEntry {
+  readonly expiresAt: number;
+  readonly record: ETFFlowRecord;
 }
 
 type ETFRequestError = Error & { readonly retryable: boolean };
@@ -34,6 +38,9 @@ const createETFRequestError = (
   message: string,
   retryable: boolean,
 ): ETFRequestError => Object.assign(new Error(message), { retryable });
+
+const etfFlowCache = new Map<string, ETFFlowCacheEntry>();
+const etfFlowRequests = new Map<string, Promise<ETFFlowRecord>>();
 
 // ============================================================================
 // US Market Trading Day Calculation
@@ -162,6 +169,16 @@ const getFiniteNumber = (
   return value;
 };
 
+const getOptionalFiniteNumber = (
+  record: Record<string, unknown>,
+  field: string,
+): number | undefined => {
+  const value = record[field];
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
+};
+
 const validateTimestamp = (timestamp: number, field: string): void => {
   const maximum = Math.floor(Date.now() / 1000) + MAX_FUTURE_SKEW_SECONDS;
   if (
@@ -182,13 +199,16 @@ const parseFlowRecord = (value: unknown): ETFFlowRecord => {
 
   return {
     timestamp,
-    bitcoinUsd: getFiniteNumber(record, "Bitcoin"),
-    ethereumUsd: getFiniteNumber(record, "Ethereum"),
-    solanaUsd: getFiniteNumber(record, "Solana"),
+    bitcoinUsd: getOptionalFiniteNumber(record, "Bitcoin"),
+    ethereumUsd: getOptionalFiniteNumber(record, "Ethereum"),
+    solanaUsd: getOptionalFiniteNumber(record, "Solana"),
   };
 };
 
-export const parseETFFlowPage = (html: string): ETFFlowRecord => {
+export const parseETFFlowPage = (
+  html: string,
+  maximumTimestamp: number = Number.POSITIVE_INFINITY,
+): ETFFlowRecord => {
   const $ = cheerio.load(html);
   const nextDataText = $("script#__NEXT_DATA__").first().text().trim();
   if (!nextDataText) {
@@ -211,12 +231,17 @@ export const parseETFFlowPage = (html: string): ETFFlowRecord => {
   for (const [key, value] of Object.entries(flows)) {
     const timestamp = Number(key);
     validateTimestamp(timestamp, "flow key");
-    if (latestEntry === undefined || timestamp > latestEntry[0]) {
+    if (
+      timestamp <= maximumTimestamp &&
+      (latestEntry === undefined || timestamp > latestEntry[0])
+    ) {
       latestEntry = [timestamp, value];
     }
   }
   if (latestEntry === undefined) {
-    throw new Error("Invalid ETF data: flows must contain at least one record");
+    throw new Error(
+      "Invalid ETF data: flows must contain a record on or before the requested trading day",
+    );
   }
 
   const latest = parseFlowRecord(latestEntry[1]);
@@ -271,7 +296,19 @@ export const shouldRetryETFFlowFetch = (error: unknown): boolean => {
 export const isRetryableETFStatus = (status: number): boolean =>
   status === 408 || status === 429 || status >= 500;
 
-const fetchETFFlowPage = async (): Promise<ETFFlowRecord> => {
+const getTradingDayTimestamp = (date: Date): number =>
+  Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 1000;
+
+const getTradingDayCacheKey = (date: Date): string =>
+  [
+    date.getFullYear(),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ].join("-");
+
+const fetchETFFlowPageForTradingDay = async (
+  maximumTimestamp: number,
+): Promise<ETFFlowRecord> => {
   const response = await fetch(DEFILLAMA_ETF_URL, {
     headers: { Accept: "text/html" },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
@@ -282,23 +319,55 @@ const fetchETFFlowPage = async (): Promise<ETFFlowRecord> => {
       isRetryableETFStatus(response.status),
     );
   }
-  return parseETFFlowPage(await readETFFlowResponseBody(response));
+  return parseETFFlowPage(
+    await readETFFlowResponseBody(response),
+    maximumTimestamp,
+  );
 };
 
-const fetchETFFlows = async (): Promise<ETFFlowRecord> => {
-  const today = new Date().toISOString().split("T")[0];
-  return withCache(
-    `etf-flows-${today}`,
-    () =>
-      backOff(fetchETFFlowPage, {
-        numOfAttempts: 3,
-        startingDelay: 1000,
-        timeMultiple: 2,
-        jitter: "full",
-        retry: shouldRetryETFFlowFetch,
-      }),
-    { ttlMs: CACHE_TTL_MS },
-  );
+const fetchETFFlowRecord = (maximumTimestamp: number): Promise<ETFFlowRecord> =>
+  backOff(() => fetchETFFlowPageForTradingDay(maximumTimestamp), {
+    numOfAttempts: 3,
+    startingDelay: 1000,
+    timeMultiple: 2,
+    jitter: "full",
+    retry: shouldRetryETFFlowFetch,
+  });
+
+const fetchETFFlows = async (tradingDate: Date): Promise<ETFFlowRecord> => {
+  const maximumTimestamp = getTradingDayTimestamp(tradingDate);
+  if (process.env["DISABLE_CACHE"] === "true") {
+    return fetchETFFlowRecord(maximumTimestamp);
+  }
+
+  const cacheKey = getTradingDayCacheKey(tradingDate);
+  const now = Date.now();
+  const cached = etfFlowCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.record;
+  }
+  if (cached) {
+    etfFlowCache.delete(cacheKey);
+  }
+
+  const pending = etfFlowRequests.get(cacheKey);
+  if (pending) return pending;
+
+  const request = fetchETFFlowRecord(maximumTimestamp)
+    .then((record) => {
+      if (process.env["DISABLE_CACHE"] !== "true") {
+        etfFlowCache.set(cacheKey, {
+          expiresAt: Date.now() + CACHE_TTL_MS,
+          record,
+        });
+      }
+      return record;
+    })
+    .finally(() => {
+      etfFlowRequests.delete(cacheKey);
+    });
+  etfFlowRequests.set(cacheKey, request);
+  return request;
 };
 
 // ============================================================================
@@ -314,9 +383,17 @@ export const formatMillion = (value: number): string => {
 
 const buildETFItem = (
   type: "BTC" | "ETH" | "SOL",
-  usd: number,
+  usd: number | undefined,
   url: string,
 ) => {
+  if (usd === undefined) {
+    return {
+      text: `${type} ETFs: unavailable`,
+      sentiment: "neutral",
+      url,
+    } as const;
+  }
+
   const millions = usd / 1_000_000;
   return {
     text: `${type} ETFs: ${formatMillion(millions)}`,
@@ -330,11 +407,12 @@ export const etfFlowsSource: DataSource = {
   priority: 3,
   timeoutMs: 90_000,
 
-  fetch: async (): Promise<BriefingSection> => {
+  fetch: async (date: Date): Promise<BriefingSection> => {
     console.log(
       `[etf-flows] Fetching aggregate flows from ${DEFILLAMA_ETF_URL}`,
     );
-    const record = await fetchETFFlows();
+    const tradingDate = getPreviousTradingDay(date);
+    const record = await fetchETFFlows(tradingDate);
 
     return {
       title: `ETF Flows from ${formatTradingDate(new Date(record.timestamp * 1000))}`,

@@ -2,8 +2,9 @@
  * Tests for trading day logic and ETF flow parsing
  */
 
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
+  etfFlowsSource,
   formatMillion,
   formatTradingDate,
   getEasterDate,
@@ -16,6 +17,18 @@ import {
   readETFFlowResponseBody,
   shouldRetryETFFlowFetch,
 } from "../src/sources/etf-flows";
+
+const originalFetch = globalThis.fetch;
+const originalDisableCache = process.env["DISABLE_CACHE"];
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+  if (originalDisableCache === undefined) {
+    delete process.env["DISABLE_CACHE"];
+  } else {
+    process.env["DISABLE_CACHE"] = originalDisableCache;
+  }
+});
 
 // ============================================================================
 // isTradingDay
@@ -351,8 +364,8 @@ describe("parseETFFlowPage", () => {
     });
   });
 
-  it("rejects a malformed newest record instead of returning stale data", () => {
-    expect(() =>
+  it("keeps valid assets when the selected record has a malformed asset", () => {
+    expect(
       parseETFFlowPage(
         makePage({
           "1785715200": {
@@ -368,11 +381,16 @@ describe("parseETFFlowPage", () => {
           },
         }),
       ),
-    ).toThrow("Solana must be a finite number");
+    ).toEqual({
+      timestamp: 1785801600,
+      bitcoinUsd: 211_500_000,
+      ethereumUsd: 53_100_000,
+      solanaUsd: undefined,
+    });
   });
 
   it("does not infer a missing asset flow as zero", () => {
-    expect(() =>
+    expect(
       parseETFFlowPage(
         makePage({
           "1785801600": {
@@ -382,11 +400,11 @@ describe("parseETFFlowPage", () => {
           },
         }),
       ),
-    ).toThrow("Solana must be a finite number");
+    ).toMatchObject({ solanaUsd: undefined });
   });
 
-  it("rejects non-numeric asset flows", () => {
-    expect(() =>
+  it("marks non-numeric asset flows unavailable", () => {
+    expect(
       parseETFFlowPage(
         makePage({
           "1785801600": {
@@ -397,7 +415,7 @@ describe("parseETFFlowPage", () => {
           },
         }),
       ),
-    ).toThrow("Bitcoin must be a finite number");
+    ).toMatchObject({ bitcoinUsd: undefined, ethereumUsd: 53_100_000 });
   });
 
   it("rejects millisecond timestamps", () => {
@@ -440,6 +458,26 @@ describe("parseETFFlowPage", () => {
     expect(() =>
       parseETFFlowPage('<script id="__NEXT_DATA__">not-json</script>'),
     ).toThrow("__NEXT_DATA__ is not valid JSON");
+  });
+
+  it("selects the latest record at or before the requested cutoff", () => {
+    const cutoff = Date.UTC(2026, 0, 6) / 1000;
+    const result = parseETFFlowPage(
+      makePage({
+        [Date.UTC(2026, 0, 5) / 1000]: {
+          date: Date.UTC(2026, 0, 5) / 1000,
+          Bitcoin: 1,
+        },
+        [cutoff]: { date: cutoff, Bitcoin: 2 },
+        [Date.UTC(2026, 0, 7) / 1000]: {
+          date: Date.UTC(2026, 0, 7) / 1000,
+          Bitcoin: 3,
+        },
+      }),
+      cutoff,
+    );
+    expect(result.timestamp).toBe(cutoff);
+    expect(result.bitcoinUsd).toBe(2);
   });
 });
 
@@ -492,6 +530,126 @@ describe("readETFFlowResponseBody", () => {
     }
     expect(sizeError).toBeInstanceOf(Error);
     expect(shouldRetryETFFlowFetch(sizeError)).toBe(false);
+  });
+
+  it("rejects a streamed body that exceeds the limit despite a low header", async () => {
+    let cancelled = false;
+    const chunk = new Uint8Array(2 * 1024 * 1024);
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+        controller.enqueue(chunk);
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const response = new Response(body, {
+      headers: { "content-length": "1" },
+    });
+
+    let streamError: unknown;
+    try {
+      await readETFFlowResponseBody(response);
+    } catch (error) {
+      streamError = error;
+    }
+    expect(streamError).toBeInstanceOf(Error);
+    expect((streamError as Error).message).toContain("exceeds 5 MiB");
+    expect(cancelled).toBe(true);
+  });
+});
+
+describe("etfFlowsSource", () => {
+  const makePage = (flows: unknown): string =>
+    `<script id="__NEXT_DATA__">${JSON.stringify({ props: { pageProps: { flows } } })}</script>`;
+
+  it("selects the requested trading date and preserves partial asset data", async () => {
+    process.env["DISABLE_CACHE"] = "true";
+    const jan5 = Date.UTC(2026, 0, 5) / 1000;
+    const jan6 = Date.UTC(2026, 0, 6) / 1000;
+    const jan7 = Date.UTC(2026, 0, 7) / 1000;
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          makePage({
+            [jan5]: { date: jan5, Bitcoin: 100_000_000 },
+            [jan6]: {
+              date: jan6,
+              Bitcoin: 211_500_000,
+              Ethereum: "malformed",
+              Solana: 0,
+            },
+            [jan7]: { date: jan7, Bitcoin: 999_000_000 },
+          }),
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const section = await etfFlowsSource.fetch(new Date(2026, 0, 7, 12));
+    if (Array.isArray(section)) throw new Error("Expected one ETF section");
+
+    expect(section.title).toContain("Tue, Jan 6");
+    expect(section.items.map((item) => item.text)).toEqual([
+      "BTC ETFs: +$211.5M",
+      "ETH ETFs: unavailable",
+      "SOL ETFs: $0",
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries transient HTTP failures", async () => {
+    process.env["DISABLE_CACHE"] = "true";
+    const timestamp = Date.UTC(2026, 1, 4) / 1000;
+    const fetchMock = mock(async () =>
+      fetchMock.mock.calls.length === 1
+        ? new Response("unavailable", { status: 500 })
+        : new Response(
+            makePage({
+              [timestamp]: { date: timestamp, Bitcoin: 1, Ethereum: 2 },
+            }),
+          ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const section = await etfFlowsSource.fetch(new Date(2026, 1, 5, 12));
+    if (Array.isArray(section)) throw new Error("Expected one ETF section");
+
+    expect(section.items[0]?.text).toBe("BTC ETFs: +$0.0M");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("deduplicates cached requests by date and honors DISABLE_CACHE", async () => {
+    process.env["DISABLE_CACHE"] = "false";
+    const mar3 = Date.UTC(2026, 2, 3) / 1000;
+    const mar4 = Date.UTC(2026, 2, 4) / 1000;
+    const fetchMock = mock(
+      async () =>
+        new Response(
+          makePage({
+            [mar3]: { date: mar3, Bitcoin: 1 },
+            [mar4]: { date: mar4, Bitcoin: 2 },
+          }),
+        ),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const firstDate = new Date(2026, 2, 4, 12);
+    await Promise.all([
+      etfFlowsSource.fetch(firstDate),
+      etfFlowsSource.fetch(firstDate),
+    ]);
+    await etfFlowsSource.fetch(firstDate);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await etfFlowsSource.fetch(new Date(2026, 2, 5, 12));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    process.env["DISABLE_CACHE"] = "true";
+    await etfFlowsSource.fetch(firstDate);
+    await etfFlowsSource.fetch(firstDate);
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });
 
