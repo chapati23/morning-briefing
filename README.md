@@ -63,7 +63,7 @@ bun dev
 src/
 ├── sources/          # Data sources (one file per integration)
 │   ├── index.ts      # Source registry — add new sources here
-│   ├── etf-flows.ts  # BTC/ETH/SOL ETF flows (Puppeteer)
+│   ├── etf-flows.ts  # BTC/ETH/SOL aggregate ETF flows
 │   ├── overnight-futures.ts
 │   ├── economic-calendar.ts
 │   ├── appstore-rankings.ts

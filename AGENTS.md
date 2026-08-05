@@ -44,17 +44,16 @@ channels/telegram.ts (formatBriefingForTelegram)
 
 ### Sources (`src/sources/`)
 
-| File                        | What it fetches                                      |
-| --------------------------- | ---------------------------------------------------- |
-| `etf-flows.ts`              | BTC/ETH/SOL ETF flows from farside.co.uk (Puppeteer) |
-| `overnight-futures.ts`      | ES, NQ, GC, CL etc. from Yahoo Finance               |
-| `economic-calendar.ts`      | Week-ahead macro events                              |
-| `appstore-rankings.ts`      | iOS App Store Finance + Overall rankings             |
-| `daily-degen.ts`            | Crypto news digest                                   |
-| `polymarket.ts`             | Prediction market movements                          |
-| `opensea-voyages.ts`        | NFT voyage data                                      |
-| `tracked-apps.ts`           | Config: which apps to track in App Store             |
-| `fetch-current-rankings.ts` | Shared helper for appstore-rankings                  |
+| File                        | What it fetches                                |
+| --------------------------- | ---------------------------------------------- |
+| `etf-flows.ts`              | BTC/ETH/SOL aggregate ETF flows from DefiLlama |
+| `overnight-futures.ts`      | ES, NQ, GC, CL etc. from Yahoo Finance         |
+| `economic-calendar.ts`      | Week-ahead macro events                        |
+| `appstore-rankings.ts`      | iOS App Store Finance + Overall rankings       |
+| `daily-degen.ts`            | Crypto news digest                             |
+| `polymarket.ts`             | Prediction market movements                    |
+| `tracked-apps.ts`           | Config: which apps to track in App Store       |
+| `fetch-current-rankings.ts` | Shared helper for appstore-rankings            |
 
 ---
 
@@ -196,7 +195,6 @@ See `docs/deploy-from-scratch.md` for the full deploy guide.
 | -------------------- | ---------- | --------------- | -------------------------------------------------- |
 | `TELEGRAM_BOT_TOKEN` | Yes (prod) | —               | Bot API token from @BotFather                      |
 | `TELEGRAM_CHAT_ID`   | Yes (prod) | —               | Target chat for briefings                          |
-| `AGENTMAIL_API_KEY`  | No         | —               | For email-based sources (Daily Degen, OpenSea)     |
 | `TIMEZONE`           | No         | `Europe/Berlin` | Briefing timezone                                  |
 | `USE_MOCK_DATA`      | No         | `false`         | Use mock sources                                   |
 | `LOG_LEVEL`          | No         | `info`          | Logging verbosity                                  |
@@ -262,7 +260,7 @@ cd terraform && make plan  # Loads secrets from ../.env.local automatically
 
 ### Cloud Run logs show "Container failed to start"
 
-Check memory limits (Puppeteer needs 2Gi) and environment variables:
+Check memory limits and environment variables:
 
 ```bash
 bun run logs          # Tail Cloud Run logs

@@ -4,15 +4,17 @@
 
 import { describe, expect, it } from "bun:test";
 import {
-  buildETFItem,
   formatMillion,
   formatTradingDate,
   getEasterDate,
   getFlowSentiment,
   getPreviousTradingDay,
   isTradingDay,
+  isRetryableETFStatus,
   isUSMarketHoliday,
-  parseFlowValue,
+  parseETFFlowPage,
+  readETFFlowResponseBody,
+  shouldRetryETFFlowFetch,
 } from "../src/sources/etf-flows";
 
 // ============================================================================
@@ -309,46 +311,187 @@ describe("formatTradingDate", () => {
 });
 
 // ============================================================================
-// parseFlowValue
+// parseETFFlowPage
 // ============================================================================
 
-describe("parseFlowValue", () => {
-  it("parses positive numbers", () => {
-    expect(parseFlowValue("145.2")).toBe(145.2);
-    expect(parseFlowValue("100")).toBe(100);
+describe("parseETFFlowPage", () => {
+  const makePage = (flows: unknown): string => `
+    <html>
+      <body>
+        <script id="__NEXT_DATA__" type="application/json">
+          ${JSON.stringify({ props: { pageProps: { flows } } })}
+        </script>
+      </body>
+    </html>
+  `;
+
+  it("extracts the latest valid aggregate flow record", () => {
+    const result = parseETFFlowPage(
+      makePage({
+        "1785715200": {
+          date: 1785715200,
+          Bitcoin: 170_100_000,
+          Ethereum: -11_900_000,
+          Solana: 0,
+        },
+        "1785801600": {
+          date: 1785801600,
+          Bitcoin: 211_500_000,
+          Ethereum: 53_100_000,
+          Solana: 0,
+        },
+      }),
+    );
+
+    expect(result).toEqual({
+      timestamp: 1785801600,
+      bitcoinUsd: 211_500_000,
+      ethereumUsd: 53_100_000,
+      solanaUsd: 0,
+    });
   });
 
-  it("parses negative numbers in parentheses", () => {
-    expect(parseFlowValue("(312.2)")).toBe(-312.2);
-    expect(parseFlowValue("(50)")).toBe(-50);
+  it("rejects a malformed newest record instead of returning stale data", () => {
+    expect(() =>
+      parseETFFlowPage(
+        makePage({
+          "1785715200": {
+            date: 1785715200,
+            Bitcoin: 170_100_000,
+            Ethereum: -11_900_000,
+            Solana: 0,
+          },
+          "1785801600": {
+            date: 1785801600,
+            Bitcoin: 211_500_000,
+            Ethereum: 53_100_000,
+          },
+        }),
+      ),
+    ).toThrow("Solana must be a finite number");
   });
 
-  it("parses numbers with commas", () => {
-    expect(parseFlowValue("1,234.5")).toBe(1234.5);
-    expect(parseFlowValue("(1,000)")).toBe(-1000);
+  it("does not infer a missing asset flow as zero", () => {
+    expect(() =>
+      parseETFFlowPage(
+        makePage({
+          "1785801600": {
+            date: 1785801600,
+            Bitcoin: 211_500_000,
+            Ethereum: 53_100_000,
+          },
+        }),
+      ),
+    ).toThrow("Solana must be a finite number");
   });
 
-  it("returns null for dash", () => {
-    expect(parseFlowValue("-")).toBe(null);
+  it("rejects non-numeric asset flows", () => {
+    expect(() =>
+      parseETFFlowPage(
+        makePage({
+          "1785801600": {
+            date: 1785801600,
+            Bitcoin: "211500000",
+            Ethereum: 53_100_000,
+            Solana: 0,
+          },
+        }),
+      ),
+    ).toThrow("Bitcoin must be a finite number");
   });
 
-  it("returns null for empty string", () => {
-    expect(parseFlowValue("")).toBe(null);
+  it("rejects millisecond timestamps", () => {
+    expect(() =>
+      parseETFFlowPage(
+        makePage({
+          "1785801600000": {
+            date: 1785801600000,
+            Bitcoin: 211_500_000,
+            Ethereum: 53_100_000,
+            Solana: 0,
+          },
+        }),
+      ),
+    ).toThrow("flow key must be a plausible Unix timestamp in seconds");
   });
 
-  it("returns null for invalid input", () => {
-    expect(parseFlowValue("abc")).toBe(null);
-    expect(parseFlowValue("N/A")).toBe(null);
+  it("rejects keys that do not match the record date", () => {
+    expect(() =>
+      parseETFFlowPage(
+        makePage({
+          "1785801600": {
+            date: 1785715200,
+            Bitcoin: 211_500_000,
+            Ethereum: 53_100_000,
+            Solana: 0,
+          },
+        }),
+      ),
+    ).toThrow("flow key does not match record date");
   });
 
-  it("handles zero", () => {
-    expect(parseFlowValue("0")).toBe(0);
-    expect(parseFlowValue("0.0")).toBe(0);
+  it("rejects pages without Next data", () => {
+    expect(() => parseETFFlowPage("<html></html>")).toThrow(
+      "__NEXT_DATA__ script not found",
+    );
   });
 
-  it("handles whitespace", () => {
-    expect(parseFlowValue(" 100 ")).toBe(100);
-    expect(parseFlowValue("( 50 )")).toBe(-50);
+  it("rejects invalid Next data JSON", () => {
+    expect(() =>
+      parseETFFlowPage('<script id="__NEXT_DATA__">not-json</script>'),
+    ).toThrow("__NEXT_DATA__ is not valid JSON");
+  });
+});
+
+describe("shouldRetryETFFlowFetch", () => {
+  it("retries network and timeout errors", () => {
+    expect(shouldRetryETFFlowFetch(new TypeError("fetch failed"))).toBe(true);
+    expect(
+      shouldRetryETFFlowFetch(new DOMException("timed out", "TimeoutError")),
+    ).toBe(true);
+  });
+
+  it("does not retry parsing and validation errors", () => {
+    expect(shouldRetryETFFlowFetch(new Error("invalid schema"))).toBe(false);
+
+    let validationError: unknown;
+    try {
+      parseETFFlowPage(
+        '<script id="__NEXT_DATA__">{"props":{"pageProps":{"flows":{"1785801600":{"date":1785801600,"Bitcoin":1,"Ethereum":2}}}}}</script>',
+      );
+    } catch (error) {
+      validationError = error;
+    }
+    expect(shouldRetryETFFlowFetch(validationError)).toBe(false);
+  });
+
+  it("classifies transient and permanent HTTP statuses", () => {
+    expect(isRetryableETFStatus(408)).toBe(true);
+    expect(isRetryableETFStatus(429)).toBe(true);
+    expect(isRetryableETFStatus(500)).toBe(true);
+    expect(isRetryableETFStatus(404)).toBe(false);
+  });
+});
+
+describe("readETFFlowResponseBody", () => {
+  it("reads a bounded response body", async () => {
+    const text = await readETFFlowResponseBody(new Response("<html>ok</html>"));
+    expect(text).toBe("<html>ok</html>");
+  });
+
+  it("rejects oversized responses without retrying", async () => {
+    const response = new Response("small", {
+      headers: { "content-length": String(5 * 1024 * 1024 + 1) },
+    });
+
+    let sizeError: unknown;
+    try {
+      await readETFFlowResponseBody(response);
+    } catch (error) {
+      sizeError = error;
+    }
+    expect(sizeError).toBeInstanceOf(Error);
+    expect(shouldRetryETFFlowFetch(sizeError)).toBe(false);
   });
 });
 
@@ -374,122 +517,5 @@ describe("formatMillion", () => {
   it("rounds to one decimal place", () => {
     expect(formatMillion(145.26)).toBe("+$145.3M");
     expect(formatMillion(-23.14)).toBe("-$23.1M");
-  });
-});
-
-// ============================================================================
-// buildETFItem (partial success handling)
-// ============================================================================
-
-describe("buildETFItem", () => {
-  const testUrl = "https://farside.co.uk/btc/";
-
-  describe("when fetch succeeds", () => {
-    it("returns formatted flow with positive sentiment", () => {
-      const result = buildETFItem(
-        "BTC",
-        {
-          status: "fulfilled",
-          value: [
-            { ticker: "IBIT", name: "IBIT", flow: 100, date: new Date() },
-          ],
-        },
-        testUrl,
-      );
-      expect(result.text).toBe("BTC ETFs: +$100.0M");
-      expect(result.sentiment).toBe("positive");
-      expect(result.url).toBe(testUrl);
-    });
-
-    it("returns formatted flow with negative sentiment", () => {
-      const result = buildETFItem(
-        "ETH",
-        {
-          status: "fulfilled",
-          value: [
-            { ticker: "ETHA", name: "ETHA", flow: -50, date: new Date() },
-          ],
-        },
-        testUrl,
-      );
-      expect(result.text).toBe("ETH ETFs: -$50.0M");
-      expect(result.sentiment).toBe("negative");
-    });
-
-    it("sums multiple ETF flows", () => {
-      const result = buildETFItem(
-        "BTC",
-        {
-          status: "fulfilled",
-          value: [
-            { ticker: "IBIT", name: "IBIT", flow: 100, date: new Date() },
-            { ticker: "FBTC", name: "FBTC", flow: 50, date: new Date() },
-            { ticker: "GBTC", name: "GBTC", flow: -30, date: new Date() },
-          ],
-        },
-        testUrl,
-      );
-      expect(result.text).toBe("BTC ETFs: +$120.0M");
-      expect(result.sentiment).toBe("positive");
-    });
-
-    it("handles zero total with neutral sentiment", () => {
-      const result = buildETFItem(
-        "SOL",
-        {
-          status: "fulfilled",
-          value: [
-            { ticker: "BSOL", name: "BSOL", flow: 50, date: new Date() },
-            { ticker: "VSOL", name: "VSOL", flow: -50, date: new Date() },
-          ],
-        },
-        testUrl,
-      );
-      expect(result.text).toBe("SOL ETFs: $0");
-      expect(result.sentiment).toBe("neutral");
-    });
-
-    it("handles empty flows array", () => {
-      const result = buildETFItem(
-        "BTC",
-        { status: "fulfilled", value: [] },
-        testUrl,
-      );
-      expect(result.text).toBe("BTC ETFs: $0");
-      expect(result.sentiment).toBe("neutral");
-    });
-  });
-
-  describe("when fetch fails", () => {
-    it("returns unavailable with neutral sentiment for Error", () => {
-      const result = buildETFItem(
-        "BTC",
-        { status: "rejected", reason: new Error("Timeout after 30000ms") },
-        testUrl,
-      );
-      expect(result.text).toBe("BTC ETFs: unavailable");
-      expect(result.sentiment).toBe("neutral");
-      expect(result.url).toBe(testUrl);
-    });
-
-    it("returns unavailable for string error", () => {
-      const result = buildETFItem(
-        "ETH",
-        { status: "rejected", reason: "Network error" },
-        testUrl,
-      );
-      expect(result.text).toBe("ETH ETFs: unavailable");
-      expect(result.sentiment).toBe("neutral");
-    });
-
-    it("handles different ETF types", () => {
-      const solResult = buildETFItem(
-        "SOL",
-        { status: "rejected", reason: new Error("Connection refused") },
-        "https://farside.co.uk/sol/",
-      );
-      expect(solResult.text).toBe("SOL ETFs: unavailable");
-      expect(solResult.url).toBe("https://farside.co.uk/sol/");
-    });
   });
 });

@@ -13,7 +13,6 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
 
       resources {
         limits = {
-          # 2Gi needed for running 3 Puppeteer instances in parallel
           memory = "2Gi"
           cpu    = "1"
         }
@@ -38,21 +37,6 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
             version = "latest"
           }
         }
-      }
-
-      env {
-        name = "AGENTMAIL_API_KEY"
-        value_source {
-          secret_key_ref {
-            secret  = google_secret_manager_secret.agentmail_api_key.secret_id
-            version = "latest"
-          }
-        }
-      }
-
-      env {
-        name  = "AGENTMAIL_EMAIL_ADDRESS"
-        value = var.agentmail_email_address
       }
 
       # Regular environment variables
@@ -80,12 +64,6 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
       env {
         name  = "GCS_DATA_BUCKET"
         value = google_storage_bucket.data.name
-      }
-
-      # Puppeteer configuration - point to Chrome cache from base image
-      env {
-        name  = "PUPPETEER_CACHE_DIR"
-        value = "/home/pptruser/.cache/puppeteer"
       }
 
       ports {
@@ -132,7 +110,6 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
     google_artifact_registry_repository.morning_briefing,
     google_secret_manager_secret_version.telegram_bot_token,
     google_secret_manager_secret_version.telegram_chat_id,
-    google_secret_manager_secret_version.agentmail_api_key,
   ]
 
   lifecycle {

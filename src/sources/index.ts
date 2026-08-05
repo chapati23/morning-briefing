@@ -19,10 +19,6 @@ import {
   overnightFuturesSource,
 } from "./overnight-futures";
 import {
-  mockOpenSeaVoyagesSource,
-  openSeaVoyagesSource,
-} from "./opensea-voyages";
-import {
   appStoreRankingsSource,
   mockAppStoreRankingsSource,
 } from "./appstore-rankings";
@@ -46,7 +42,6 @@ const getRealSources = (): DataSource[] => [
   polymarketMoversSource,
   polymarketTopMarketsSource,
   appStoreRankingsSource,
-  openSeaVoyagesSource,
 ];
 
 const getMockSources = (): DataSource[] => [
@@ -57,7 +52,6 @@ const getMockSources = (): DataSource[] => [
   mockPolymarketMoversSource,
   mockPolymarketTopMarketsSource,
   mockAppStoreRankingsSource,
-  mockOpenSeaVoyagesSource,
 ];
 
 const ALL_SOURCES = (): DataSource[] => {
