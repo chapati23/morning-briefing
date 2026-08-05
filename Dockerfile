@@ -1,10 +1,11 @@
 # syntax=docker/dockerfile:1
-FROM oven/bun:1.3.9-slim AS base
+FROM oven/bun:1.3.9-slim@sha256:8ca06c7812d9050ccc4b80799685f395d6a0d051d3b7207dfd120e2b437b1ec9 AS base
 
 WORKDIR /app
 
 # Install dependencies (with BuildKit cache mount for faster rebuilds)
 COPY package.json bun.lock ./
+COPY patches ./patches
 RUN --mount=type=cache,target=/root/.bun/install/cache \
     bun install --frozen-lockfile --production
 

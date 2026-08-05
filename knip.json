@@ -3,5 +3,5 @@
   "project": ["src/**/*.ts"],
   "ignore": ["**/*.test.ts"],
   "ignoreDependencies": [],
-  "ignoreBinaries": ["tsc", "trunk", "gcloud", "jq"]
+  "ignoreBinaries": ["tsc", "trunk", "gcloud", "terraform", "jq"]
 }
