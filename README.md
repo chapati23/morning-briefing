@@ -8,7 +8,7 @@ tier).
 
 Every morning, receive a Telegram message with:
 
-- ETF fund flows (SPY, QQQ, etc.)
+- Aggregate BTC, ETH, and SOL ETF fund flows
 - Economic calendar highlights
 - Prediction market movements
 - And more...
