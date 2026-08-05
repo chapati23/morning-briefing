@@ -424,6 +424,32 @@ describe("parseETFFlowPage", () => {
     ).toMatchObject({ bitcoinUsd: undefined, ethereumUsd: 53_100_000 });
   });
 
+  it("rejects records with no finite asset flows without retrying", () => {
+    const records = [
+      { date: 1785801600 },
+      {
+        date: 1785801600,
+        Bitcoin: "211500000",
+        Ethereum: null,
+        Solana: Number.NaN,
+      },
+    ];
+
+    for (const record of records) {
+      let validationError: unknown;
+      try {
+        parseETFFlowPage(makePage({ "1785801600": record }));
+      } catch (error) {
+        validationError = error;
+      }
+      expect(validationError).toBeInstanceOf(Error);
+      expect((validationError as Error).message).toContain(
+        "at least one finite asset flow",
+      );
+      expect(shouldRetryETFFlowFetch(validationError)).toBe(false);
+    }
+  });
+
   it("rejects millisecond timestamps", () => {
     expect(() =>
       parseETFFlowPage(

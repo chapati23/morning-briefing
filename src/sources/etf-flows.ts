@@ -197,12 +197,25 @@ const parseFlowRecord = (value: unknown): ETFFlowRecord => {
   const timestamp = getFiniteNumber(record, "date");
   validateTimestamp(timestamp, "date");
 
-  return {
+  const parsed = {
     timestamp,
     bitcoinUsd: getOptionalFiniteNumber(record, "Bitcoin"),
     ethereumUsd: getOptionalFiniteNumber(record, "Ethereum"),
     solanaUsd: getOptionalFiniteNumber(record, "Solana"),
   };
+
+  if (
+    parsed.bitcoinUsd === undefined &&
+    parsed.ethereumUsd === undefined &&
+    parsed.solanaUsd === undefined
+  ) {
+    throw createETFRequestError(
+      "Invalid ETF data: flow record must contain at least one finite asset flow",
+      false,
+    );
+  }
+
+  return parsed;
 };
 
 export const parseETFFlowPage = (
