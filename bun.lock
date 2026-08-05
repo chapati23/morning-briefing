@@ -27,20 +27,6 @@
     "teeny-request@9.0.0": "patches/teeny-request@9.0.0.patch",
     "gaxios@6.7.1": "patches/gaxios@6.7.1.patch",
   },
-  "overrides": {
-    "@tootallnate/once": "2.0.1",
-    "@typescript-eslint/type-utils": "8.66.0",
-    "@typescript-eslint/utils": "8.66.0",
-    "brace-expansion@1": "1.1.18",
-    "brace-expansion@2": "2.1.4",
-    "fast-xml-parser": "5.7.0",
-    "flatted": "3.4.2",
-    "form-data": "2.5.6",
-    "picomatch@2": "2.3.2",
-    "picomatch@4": "4.0.4",
-    "smol-toml": "1.6.1",
-    "undici": "7.29.0",
-  },
   "packages": {
     "@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.28.5", "", {}, "sha512-qSs4ifwzKJSV39ucNjsvc6WVHs6b7S03sOh2OcHF9UHfVPqWWALUsNUVzhSBiItjRZoLHx7nIarVjqKVusUZ1Q=="],
 
