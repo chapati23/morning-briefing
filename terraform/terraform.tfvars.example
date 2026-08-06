@@ -8,7 +8,6 @@ github_repo = "youruser/morning-briefing"
 # Schedule Configuration (cron syntax)
 schedule_cron = "0 8 * * *" # 8:00 AM daily
 
-# Note: secrets and runtime env (telegram_bot_token, telegram_chat_id,
-# timezone, agentmail_api_key, agentmail_email_address) are read from
-# ../.env.local via the Makefile. Run `make plan` or `make apply` instead of
-# running terraform directly.
+# Note: secrets and runtime env (telegram_bot_token, telegram_chat_id, timezone)
+# are read from ../.env.local via the Makefile. Run `make plan` or `make apply`
+# instead of running terraform directly.

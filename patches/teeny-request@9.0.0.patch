@@ -1,0 +1,36 @@
+diff --git a/build/src/index.js b/build/src/index.js
+index af5d15e260e2a47588c7c536447fe84bd3f86136..2f1d2e1b803d540086aecfb5db529c2eb453dbda 100644
+--- a/build/src/index.js
++++ b/build/src/index.js
+@@ -19,7 +19,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
+ exports.teenyRequest = exports.RequestError = void 0;
+ const node_fetch_1 = require("node-fetch");
+ const stream_1 = require("stream");
+-const uuid = require("uuid");
++const crypto_1 = require("crypto");
+ const agents_1 = require("./agents");
+ const TeenyStatistics_1 = require("./TeenyStatistics");
+ // eslint-disable-next-line @typescript-eslint/no-var-requires
+@@ -132,7 +132,7 @@ function teenyRequest(reqOpts, callback) {
+             // TODO: add support for multipart uploads through streaming
+             throw new Error('Multipart without callback is not implemented.');
+         }
+-        const boundary = uuid.v4();
++        const boundary = (0, crypto_1.randomUUID)();
+         options.headers['Content-Type'] = `multipart/related; boundary=${boundary}`;
+         options.body = createMultipartStream(boundary, multipart);
+         // Multipart upload
+diff --git a/package.json b/package.json
+index d24f9dd37590d520c8c16538e7a89af8d16e9410..f24aaf25055fb3ba6abb37cc6f453cf122398d15 100644
+--- a/package.json
++++ b/package.json
+@@ -41,8 +41,7 @@
+     "http-proxy-agent": "^5.0.0",
+     "https-proxy-agent": "^5.0.0",
+     "node-fetch": "^2.6.9",
+-    "stream-events": "^1.0.5",
+-    "uuid": "^9.0.0"
++    "stream-events": "^1.0.5"
+   },
+   "devDependencies": {
+     "@babel/plugin-proposal-private-methods": "^7.18.6",

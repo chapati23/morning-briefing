@@ -85,14 +85,3 @@ export interface TelegramConfig {
 }
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
-
-// ============================================================================
-// Market Data Types
-// ============================================================================
-
-export interface ETFFlow {
-  readonly ticker: string;
-  readonly name: string;
-  readonly flow: number; // Positive = inflow, negative = outflow
-  readonly date: Date;
-}

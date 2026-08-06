@@ -78,7 +78,7 @@ describe("Full Briefing Pipeline", () => {
     it("should exclude sources that return empty items from the briefing", async () => {
       const sources: DataSource[] = [
         createSuccessSource("ETF Flows", 1, [{ text: "SPY: +$500M" }]),
-        createSuccessSource("OpenSea Voyages", 2, []), // No voyages available
+        createSuccessSource("Empty Source", 2, []),
         createSuccessSource("Polymarket", 3, [{ text: "Bitcoin $100k: 45%" }]),
       ];
 

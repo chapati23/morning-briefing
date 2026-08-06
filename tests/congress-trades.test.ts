@@ -746,7 +746,7 @@ describe("congressTradesSource.fetch error handling", () => {
         throw new Error("Network error");
       },
       { preconnect: () => {} },
-    ) as unknown as typeof fetch;
+    );
     try {
       // Use a unique date so cache doesn't serve a prior result
       const result = await congressTradesSource.fetch(new Date("2099-01-01"));

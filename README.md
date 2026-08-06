@@ -8,7 +8,7 @@ tier).
 
 Every morning, receive a Telegram message with:
 
-- ETF fund flows (SPY, QQQ, etc.)
+- Aggregate BTC, ETH, and SOL ETF fund flows
 - Economic calendar highlights
 - Prediction market movements
 - And more...
@@ -31,6 +31,9 @@ cd terraform && make deploy
 
 See [docs/deploy-from-scratch.md](docs/deploy-from-scratch.md) for detailed
 instructions.
+
+Dependency security pins and package patches are maintained in
+[docs/dependency-security.md](docs/dependency-security.md).
 
 ## Local Development
 
@@ -63,7 +66,7 @@ bun dev
 src/
 ├── sources/          # Data sources (one file per integration)
 │   ├── index.ts      # Source registry — add new sources here
-│   ├── etf-flows.ts  # BTC/ETH/SOL ETF flows (Puppeteer)
+│   ├── etf-flows.ts  # BTC/ETH/SOL aggregate ETF flows
 │   ├── overnight-futures.ts
 │   ├── economic-calendar.ts
 │   ├── appstore-rankings.ts
