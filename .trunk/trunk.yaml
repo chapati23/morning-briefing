@@ -25,6 +25,11 @@ lint:
     - markdownlint@0.47.0
     - git-diff-check
   ignore:
+    # bun.lock contains package integrity hashes, not prose; codespell can
+    # misidentify checksum fragments as words.
+    - linters: [codespell]
+      paths:
+        - bun.lock
     - linters: [ALL]
       paths:
         - node_modules/**

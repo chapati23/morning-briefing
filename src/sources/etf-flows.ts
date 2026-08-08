@@ -1,46 +1,46 @@
 /**
  * ETF Flows Data Source
  *
- * Fetches aggregate Bitcoin, Ethereum, and Solana ETF flows from DefiLlama's
- * server-rendered ETF page. Farside remains the attribution link shown to users.
+ * Scrapes Bitcoin and Ethereum ETF flow data from farside.co.uk
+ * Note: This site uses Cloudflare protection, so we need Puppeteer.
  */
 
 import * as cheerio from "cheerio";
 import { backOff } from "exponential-backoff";
+import puppeteer, { type Browser } from "puppeteer";
 import type { BriefingSection, DataSource } from "../types";
+import { withCache } from "../utils";
 
-const DEFILLAMA_ETF_URL = "https://defillama2.llamao.fi/etfs";
 const BTC_ETF_URL = "https://farside.co.uk/btc/";
 const ETH_ETF_URL = "https://farside.co.uk/eth/";
 const SOL_ETF_URL = "https://farside.co.uk/sol/";
 
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-const FETCH_TIMEOUT_MS = 20_000;
-const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
-const MIN_FLOW_TIMESTAMP = Date.UTC(2009, 0, 1) / 1000;
-const MAX_FUTURE_SKEW_SECONDS = 7 * 24 * 60 * 60;
+export const ETF_FLOW_SOURCE_TIMEOUT_MS = 90_000;
+const ETF_FLOW_RETRY_ATTEMPTS = 2;
 
-interface ETFFlowRecord {
-  readonly timestamp: number;
-  readonly bitcoinUsd: number | undefined;
-  readonly ethereumUsd: number | undefined;
-  readonly solanaUsd: number | undefined;
+const ETF_NAVIGATION_TIMEOUT_MS = 20_000;
+const ETF_CLOUDFLARE_CHALLENGE_TIMEOUT_MS = 6_000;
+const ETF_NETWORK_IDLE_TIMEOUT_MS = 3_000;
+const ETF_TABLE_LOAD_TIMEOUT_MS = 8_000;
+const ETF_RETRY_DELAY_MS = 1_000;
+
+// A Cloudflare-challenged attempt can use each timeout in sequence. Two such
+// attempts plus the single retry delay total 75s, leaving 15s of the source's
+// 90s deadline for page lifecycle and browser cleanup.
+export const ETF_FLOW_RETRY_BUDGET_MS =
+  ETF_FLOW_RETRY_ATTEMPTS *
+    (ETF_NAVIGATION_TIMEOUT_MS +
+      ETF_CLOUDFLARE_CHALLENGE_TIMEOUT_MS +
+      ETF_NETWORK_IDLE_TIMEOUT_MS +
+      ETF_TABLE_LOAD_TIMEOUT_MS) +
+  ETF_RETRY_DELAY_MS;
+
+interface ETFFlow {
+  readonly ticker: string;
+  readonly name: string;
+  readonly flow: number;
+  readonly date: Date;
 }
-
-interface ETFFlowCacheEntry {
-  readonly expiresAt: number;
-  readonly record: ETFFlowRecord;
-}
-
-type ETFRequestError = Error & { readonly retryable: boolean };
-
-const createETFRequestError = (
-  message: string,
-  retryable: boolean,
-): ETFRequestError => Object.assign(new Error(message), { retryable });
-
-const etfFlowCache = new Map<string, ETFFlowCacheEntry>();
-const etfFlowRequests = new Map<string, Promise<ETFFlowRecord>>();
 
 // ============================================================================
 // US Market Trading Day Calculation
@@ -52,8 +52,9 @@ const etfFlowRequests = new Map<string, Promise<ETFFlowRecord>>();
  */
 export const getPreviousTradingDay = (date: Date): Date => {
   const result = new Date(date);
-  result.setDate(result.getDate() - 1);
+  result.setDate(result.getDate() - 1); // Start with yesterday
 
+  // Keep going back until we find a trading day
   while (!isTradingDay(result)) {
     result.setDate(result.getDate() - 1);
   }
@@ -64,25 +65,37 @@ export const getPreviousTradingDay = (date: Date): Date => {
 export const isTradingDay = (date: Date): boolean => {
   const day = date.getDay();
 
+  // Weekend check (Saturday = 6, Sunday = 0)
   if (day === 0 || day === 6) return false;
+
+  // Holiday check
   if (isUSMarketHoliday(date)) return false;
 
   return true;
 };
 
-/** Check if a date is a US stock market holiday. */
+/**
+ * Check if a date is a US stock market holiday.
+ * Covers NYSE/NASDAQ holidays with observed day adjustments.
+ */
 export const isUSMarketHoliday = (date: Date): boolean => {
   const year = date.getFullYear();
-  const month = date.getMonth();
+  const month = date.getMonth(); // 0-indexed
   const day = date.getDate();
   const dayOfWeek = date.getDay();
 
+  // New Year's Day (Jan 1, or observed on closest weekday)
   if (month === 0 && day === 1) return true;
-  if (month === 0 && day === 2 && dayOfWeek === 1) return true;
-  if (month === 11 && day === 31 && dayOfWeek === 5) return true;
+  if (month === 0 && day === 2 && dayOfWeek === 1) return true; // Observed Monday if Jan 1 is Sunday
+  if (month === 11 && day === 31 && dayOfWeek === 5) return true; // Observed Friday if Jan 1 is Saturday
+
+  // Martin Luther King Jr. Day (3rd Monday of January)
   if (month === 0 && dayOfWeek === 1 && day >= 15 && day <= 21) return true;
+
+  // Presidents' Day (3rd Monday of February)
   if (month === 1 && dayOfWeek === 1 && day >= 15 && day <= 21) return true;
 
+  // Good Friday (Friday before Easter - needs calculation)
   const easterDate = getEasterDate(year);
   const goodFriday = new Date(easterDate);
   goodFriday.setDate(goodFriday.getDate() - 2);
@@ -90,23 +103,36 @@ export const isUSMarketHoliday = (date: Date): boolean => {
     return true;
   }
 
+  // Memorial Day (Last Monday of May)
   if (month === 4 && dayOfWeek === 1 && day >= 25) return true;
+
+  // Juneteenth (June 19, or observed on closest weekday)
   if (month === 5 && day === 19) return true;
-  if (month === 5 && day === 20 && dayOfWeek === 1) return true;
-  if (month === 5 && day === 18 && dayOfWeek === 5) return true;
+  if (month === 5 && day === 20 && dayOfWeek === 1) return true; // Observed Monday
+  if (month === 5 && day === 18 && dayOfWeek === 5) return true; // Observed Friday
+
+  // Independence Day (July 4, or observed on closest weekday)
   if (month === 6 && day === 4) return true;
-  if (month === 6 && day === 5 && dayOfWeek === 1) return true;
-  if (month === 6 && day === 3 && dayOfWeek === 5) return true;
+  if (month === 6 && day === 5 && dayOfWeek === 1) return true; // Observed Monday
+  if (month === 6 && day === 3 && dayOfWeek === 5) return true; // Observed Friday
+
+  // Labor Day (1st Monday of September)
   if (month === 8 && dayOfWeek === 1 && day <= 7) return true;
+
+  // Thanksgiving Day (4th Thursday of November)
   if (month === 10 && dayOfWeek === 4 && day >= 22 && day <= 28) return true;
+
+  // Christmas Day (Dec 25, or observed on closest weekday)
   if (month === 11 && day === 25) return true;
-  if (month === 11 && day === 26 && dayOfWeek === 1) return true;
-  if (month === 11 && day === 24 && dayOfWeek === 5) return true;
+  if (month === 11 && day === 26 && dayOfWeek === 1) return true; // Observed Monday
+  if (month === 11 && day === 24 && dayOfWeek === 5) return true; // Observed Friday
 
   return false;
 };
 
-/** Calculate Easter Sunday using the Anonymous Gregorian algorithm. */
+/**
+ * Calculate Easter Sunday using the Anonymous Gregorian algorithm.
+ */
 export const getEasterDate = (year: number): Date => {
   const a = year % 19;
   const b = Math.floor(year / 100);
@@ -120,7 +146,7 @@ export const getEasterDate = (year: number): Date => {
   const k = c % 4;
   const l = (32 + 2 * e + 2 * i - h - k) % 7;
   const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1;
+  const month = Math.floor((h + l - 7 * m + 114) / 31) - 1; // 0-indexed
   const day = ((h + l - 7 * m + 114) % 31) + 1;
 
   return new Date(year, month, day);
@@ -134,260 +160,419 @@ export const getFlowSentiment = (
   return "neutral";
 };
 
-export const formatTradingDate = (date: Date): string =>
-  date.toLocaleDateString("en-US", {
+export const formatTradingDate = (date: Date): string => {
+  return date.toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
   });
+};
 
-// ============================================================================
-// DefiLlama Next.js data parsing
-// ============================================================================
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const getRecord = (value: unknown, field: string): Record<string, unknown> => {
-  if (!isRecord(value)) {
-    throw new Error(`Invalid ETF data: ${field} must be an object`);
+/**
+ * Build a briefing item for an ETF, handling both success and failure cases.
+ */
+export const buildETFItem = (
+  type: "BTC" | "ETH" | "SOL",
+  result: PromiseSettledResult<ETFFlow[]>,
+  url: string,
+): {
+  text: string;
+  sentiment: "positive" | "negative" | "neutral";
+  url: string;
+} => {
+  if (result.status === "fulfilled") {
+    const total = result.value.reduce((sum, f) => sum + f.flow, 0);
+    return {
+      text: `${type} ETFs: ${formatMillion(total)}`,
+      sentiment: getFlowSentiment(total),
+      url,
+    };
   }
-  return value;
-};
 
-const getFiniteNumber = (
-  record: Record<string, unknown>,
-  field: string,
-): number => {
-  const value = record[field];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw createETFRequestError(
-      `Invalid ETF data: ${field} must be a finite number`,
-      false,
-    );
-  }
-  return value;
-};
-
-const getOptionalFiniteNumber = (
-  record: Record<string, unknown>,
-  field: string,
-): number | undefined => {
-  const value = record[field];
-  return typeof value === "number" && Number.isFinite(value)
-    ? value
-    : undefined;
-};
-
-const validateTimestamp = (timestamp: number, field: string): void => {
-  const maximum = Math.floor(Date.now() / 1000) + MAX_FUTURE_SKEW_SECONDS;
-  if (
-    !Number.isInteger(timestamp) ||
-    timestamp < MIN_FLOW_TIMESTAMP ||
-    timestamp > maximum
-  ) {
-    throw new Error(
-      `Invalid ETF data: ${field} must be a plausible Unix timestamp in seconds`,
-    );
-  }
-};
-
-const parseFlowRecord = (value: unknown): ETFFlowRecord => {
-  const record = getRecord(value, "flow record");
-  const timestamp = getFiniteNumber(record, "date");
-  validateTimestamp(timestamp, "date");
-
-  const parsed = {
-    timestamp,
-    bitcoinUsd: getOptionalFiniteNumber(record, "Bitcoin"),
-    ethereumUsd: getOptionalFiniteNumber(record, "Ethereum"),
-    solanaUsd: getOptionalFiniteNumber(record, "Solana"),
+  // Failed - show unavailable with neutral sentiment
+  const error =
+    result.reason instanceof Error
+      ? result.reason.message
+      : String(result.reason);
+  console.warn(`[etf-flows:${type}] Unavailable: ${error}`);
+  return {
+    text: `${type} ETFs: unavailable`,
+    sentiment: "neutral",
+    url,
   };
+};
+
+// ============================================================================
+// Data Source
+// ============================================================================
+
+export const etfFlowsSource: DataSource = {
+  name: "ETF Flows",
+  priority: 3,
+  timeoutMs: ETF_FLOW_SOURCE_TIMEOUT_MS,
+
+  fetch: async (date: Date): Promise<BriefingSection> => {
+    console.log(
+      "[etf-flows] Starting ETF flows fetch (BTC, ETH, SOL in parallel)...",
+    );
+
+    console.log("[etf-flows] Launching shared browser...");
+    const browser = await launchETFBrowser();
+    const tradingDate = getPreviousTradingDay(date);
+
+    try {
+      // Use allSettled for partial success - if 1-2 fail, we still show the rest
+      const results = await Promise.allSettled([
+        fetchETFFlows(browser, BTC_ETF_URL, "BTC", tradingDate),
+        fetchETFFlows(browser, ETH_ETF_URL, "ETH", tradingDate),
+        fetchETFFlows(browser, SOL_ETF_URL, "SOL", tradingDate),
+      ]);
+
+      const [btcResult, ethResult, solResult] = results;
+
+      // Check if ALL failed - only then throw
+      const allFailed = results.every((r) => r.status === "rejected");
+      if (allFailed) {
+        const errors = results
+          .map((r) =>
+            r.status === "rejected"
+              ? r.reason instanceof Error
+                ? r.reason.message
+                : String(r.reason)
+              : "",
+          )
+          .filter(Boolean)
+          .join("; ");
+        throw new Error(`All ETF fetches failed: ${errors}`);
+      }
+
+      return {
+        title: `ETF Flows from ${formatTradingDate(tradingDate)}`,
+        icon: "📊",
+        items: [
+          buildETFItem("BTC", btcResult, BTC_ETF_URL),
+          buildETFItem("ETH", ethResult, ETH_ETF_URL),
+          buildETFItem("SOL", solResult, SOL_ETF_URL),
+        ],
+      };
+    } finally {
+      console.log("[etf-flows] Closing shared browser...");
+      await browser.close();
+    }
+  },
+};
+
+// ============================================================================
+// Scraping
+// ============================================================================
+
+const log = (type: "BTC" | "ETH" | "SOL", message: string): void => {
+  console.log(`[etf-flows:${type}] ${message}`);
+};
+
+// Cache TTL: 6 hours (data only changes once per trading day)
+const CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+const launchETFBrowser = async (): Promise<Browser> =>
+  puppeteer.launch({
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-blink-features=AutomationControlled",
+      "--disable-infobars",
+      "--window-size=1920,1080",
+    ],
+  });
+
+/**
+ * Fetch ETF flows with caching (for development) and retry (for reliability).
+ */
+const fetchETFFlows = async (
+  browser: Browser,
+  url: string,
+  type: "BTC" | "ETH" | "SOL",
+  tradingDate: Date,
+): Promise<ETFFlow[]> => {
+  const cacheKey = `etf-flows-${type}-${tradingDate.toISOString().slice(0, 10)}`;
+
+  return withCache(
+    cacheKey,
+    () => fetchETFFlowsWithRetry(browser, url, type, tradingDate),
+    { ttlMs: CACHE_TTL_MS },
+  );
+};
+
+/**
+ * Fetch ETF flows with retry logic for handling transient failures.
+ */
+const fetchETFFlowsWithRetry = async (
+  browser: Browser,
+  url: string,
+  type: "BTC" | "ETH" | "SOL",
+  tradingDate: Date,
+): Promise<ETFFlow[]> => {
+  return backOff(() => scrapeETFPage(browser, url, type, tradingDate), {
+    numOfAttempts: ETF_FLOW_RETRY_ATTEMPTS,
+    startingDelay: ETF_RETRY_DELAY_MS,
+    timeMultiple: 2,
+    jitter: "full",
+    retry: (error: unknown, attemptNumber) => {
+      const message = error instanceof Error ? error.message : String(error);
+      log(type, `Attempt ${attemptNumber} failed: ${message}. Retrying...`);
+      return true;
+    },
+  });
+};
+
+/**
+ * Scrape a single ETF page using a tab in the shared browser.
+ */
+const scrapeETFPage = async (
+  browser: Browser,
+  url: string,
+  type: "BTC" | "ETH" | "SOL",
+  tradingDate: Date,
+): Promise<ETFFlow[]> => {
+  log(type, "Creating page...");
+  const page = await browser.newPage();
+
+  try {
+    await page.setViewport({ width: 1920, height: 1080 });
+    await page.setExtraHTTPHeaders({
+      "User-Agent":
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+      Accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    });
+
+    await page.evaluateOnNewDocument(() => {
+      Object.defineProperty(navigator, "webdriver", {
+        get: () => false,
+      });
+    });
+
+    log(type, `Navigating to ${url}...`);
+    await page.goto(url, {
+      waitUntil: "networkidle2",
+      timeout: ETF_NAVIGATION_TIMEOUT_MS,
+    });
+
+    const pageTitle = await page.title();
+    if (pageTitle.includes("Just a moment")) {
+      log(type, "Detected Cloudflare challenge, waiting for it to pass...");
+      await page.waitForFunction(`!document.title.includes("Just a moment")`, {
+        timeout: ETF_CLOUDFLARE_CHALLENGE_TIMEOUT_MS,
+      });
+      await page.waitForNetworkIdle({ timeout: ETF_NETWORK_IDLE_TIMEOUT_MS });
+    }
+
+    log(type, "Waiting for table to load...");
+    await page.waitForSelector("figure table", {
+      timeout: ETF_TABLE_LOAD_TIMEOUT_MS,
+    });
+
+    log(type, "Parsing ETF data...");
+    const html = await page.content();
+    const flows = parseETFTable(html, tradingDate);
+    log(type, `Found ${flows.length} ETF flows`);
+    return flows;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log(type, `Error: ${message}`);
+    throw error;
+  } finally {
+    log(type, "Closing page...");
+    await page.close();
+  }
+};
+
+const dateAtMidnightUTC = (date: Date): number =>
+  Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+
+const parseFarsideDate = (text: string, cutoffDate: Date): Date | null => {
+  const match = text.match(/^(\d{1,2})\s+([A-Za-z]{3,9})(?:\s+(\d{4}))?$/);
+  if (!match) return null;
+
+  const [, dayText, monthText, yearText] = match;
+  if (!dayText || !monthText) return null;
+
+  const month = new Date(`${monthText} 1, 2000`).getUTCMonth();
+  const day = Number.parseInt(dayText, 10);
+  const year = yearText
+    ? Number.parseInt(yearText, 10)
+    : cutoffDate.getUTCFullYear();
+  const parsed = new Date(Date.UTC(year, month, day));
 
   if (
-    parsed.bitcoinUsd === undefined &&
-    parsed.ethereumUsd === undefined &&
-    parsed.solanaUsd === undefined
+    Number.isNaN(parsed.getTime()) ||
+    parsed.getUTCMonth() !== month ||
+    parsed.getUTCDate() !== day
   ) {
-    throw createETFRequestError(
-      "Invalid ETF data: flow record must contain at least one finite asset flow",
-      false,
-    );
+    return null;
+  }
+
+  // Farside may omit the year. Around New Year, a December row belongs to the
+  // prior year rather than the cutoff year.
+  if (!yearText && dateAtMidnightUTC(parsed) > dateAtMidnightUTC(cutoffDate)) {
+    parsed.setUTCFullYear(parsed.getUTCFullYear() - 1);
   }
 
   return parsed;
 };
 
-export const parseETFFlowPage = (
-  html: string,
-  maximumTimestamp: number = Number.POSITIVE_INFINITY,
-): ETFFlowRecord => {
+export const parseETFTable = (html: string, cutoffDate: Date): ETFFlow[] => {
   const $ = cheerio.load(html);
-  const nextDataText = $("script#__NEXT_DATA__").first().text().trim();
-  if (!nextDataText) {
-    throw new Error("Invalid ETF page: __NEXT_DATA__ script not found");
+
+  // Find the ETF data table (inside <figure>, not the layout tables)
+  // The farside.co.uk page has multiple tables - layout tables and the data table
+  const table = $("figure table").first();
+  if (table.length === 0) {
+    throw new Error("ETF table not found in HTML");
   }
 
-  let nextData: unknown;
-  try {
-    nextData = JSON.parse(nextDataText) as unknown;
-  } catch {
-    throw new Error("Invalid ETF page: __NEXT_DATA__ is not valid JSON");
+  // Get ETF ticker symbols from the second header row (first row has company logos, second has tickers)
+  const headers: string[] = [];
+  const headerRows = table.find("thead tr, tr").toArray();
+
+  // Find the row with ticker symbols (IBIT, FBTC, etc.) - typically the second row
+  for (const row of headerRows) {
+    const cells = $(row).find("th, td").toArray();
+    const cellTexts = cells.map((cell) => $(cell).text().trim());
+
+    // Look for a row that contains known ticker symbols (BTC, ETH, or SOL ETFs)
+    const knownTickers = new Set([
+      // BTC ETFs
+      "IBIT",
+      "FBTC",
+      "BITB",
+      "ARKB",
+      "BTCO",
+      "EZBC",
+      "BRRR",
+      "HODL",
+      "BTCW",
+      "GBTC",
+      "BTC",
+      // ETH ETFs
+      "ETHA",
+      "FETH",
+      "ETHW",
+      "CETH",
+      "ETHV",
+      "QETH",
+      "EZET",
+      "ETHE",
+      // SOL ETFs
+      "BSOL",
+      "VSOL",
+      "FSOL",
+      "TSOL",
+      "SOEZ",
+      "GSOL",
+    ]);
+    if (cellTexts.some((t) => knownTickers.has(t))) {
+      headers.push(...cellTexts);
+      break;
+    }
   }
 
-  const root = getRecord(nextData, "__NEXT_DATA__");
-  const props = getRecord(root["props"], "props");
-  const pageProps = getRecord(props["pageProps"], "pageProps");
-  const flows = getRecord(pageProps["flows"], "flows");
+  // Fallback: use first header row if no ticker row found
+  if (headers.length === 0 && headerRows.length > 0) {
+    const firstRow = headerRows[0];
+    if (firstRow) {
+      $(firstRow)
+        .find("th, td")
+        .each((_, el) => {
+          headers.push($(el).text().trim());
+        });
+    }
+  }
 
-  let latestEntry: readonly [timestamp: number, value: unknown] | undefined;
-  for (const [key, value] of Object.entries(flows)) {
-    const timestamp = Number(key);
-    validateTimestamp(timestamp, "flow key");
+  // Select the newest row at or before the requested trading date. This keeps
+  // retries and backfills from relabeling today's live values as old data.
+  const rows = table.find("tbody tr, tr").toArray();
+  let latestFlows: ETFFlow[] = [];
+  let latestDate: Date | null = null;
+
+  for (const row of rows) {
+    const cells = $(row).find("td, th").toArray();
+    if (cells.length < 2) continue;
+
+    // Check if this row has numeric data
+    const firstCell = $(cells[0]).text().trim();
+    if (!firstCell || firstCell.toLowerCase().includes("total")) continue;
+
+    const rowDate = parseFarsideDate(firstCell, cutoffDate);
     if (
-      timestamp <= maximumTimestamp &&
-      (latestEntry === undefined || timestamp > latestEntry[0])
+      !rowDate ||
+      dateAtMidnightUTC(rowDate) > dateAtMidnightUTC(cutoffDate)
     ) {
-      latestEntry = [timestamp, value];
+      continue;
     }
-  }
-  if (latestEntry === undefined) {
-    throw new Error(
-      "Invalid ETF data: flows must contain a record on or before the requested trading day",
-    );
-  }
 
-  const latest = parseFlowRecord(latestEntry[1]);
-  if (latest.timestamp !== latestEntry[0]) {
-    throw new Error("Invalid ETF data: flow key does not match record date");
-  }
+    const rowFlows: ETFFlow[] = [];
 
-  return latest;
-};
+    // Parse flow values (skip the Total column and any empty headers)
+    for (let j = 1; j < cells.length && j < headers.length; j++) {
+      const cell = cells[j];
+      const header = headers[j];
+      if (!cell || !header) continue;
 
-const isETFRequestError = (error: unknown): error is ETFRequestError =>
-  error instanceof Error &&
-  "retryable" in error &&
-  typeof error.retryable === "boolean";
+      // Skip the Total column - we want individual ETF flows, not aggregates
+      if (header.toLowerCase() === "total" || header === "") continue;
 
-export const readETFFlowResponseBody = async (
-  response: Response,
-): Promise<string> => {
-  const contentLength = Number(response.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > MAX_RESPONSE_BYTES) {
-    throw createETFRequestError("ETF data response exceeds 5 MiB", false);
-  }
-  const reader = (
-    response.body as ReadableStream<Uint8Array>
-  ).getReader() as ReadableStreamDefaultReader<Uint8Array>;
-  const decoder = new TextDecoder();
-  let totalBytes = 0;
-  let text = "";
-  try {
-    let result = await reader.read();
-    while (!result.done) {
-      totalBytes += result.value.byteLength;
-      if (totalBytes > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw createETFRequestError("ETF data response exceeds 5 MiB", false);
-      }
-      text += decoder.decode(result.value, { stream: true });
-      result = await reader.read();
-    }
-    return text + decoder.decode();
-  } finally {
-    reader.releaseLock();
-  }
-};
+      const text = $(cell).text().trim();
+      const flow = parseFlowValue(text);
 
-export const shouldRetryETFFlowFetch = (error: unknown): boolean => {
-  if (isETFRequestError(error)) return error.retryable;
-  if (error instanceof TypeError) return true;
-  return error instanceof DOMException && error.name === "TimeoutError";
-};
-
-export const isRetryableETFStatus = (status: number): boolean =>
-  status === 408 || status === 429 || status >= 500;
-
-const getTradingDayTimestamp = (date: Date): number =>
-  Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 1000;
-
-const getTradingDayCacheKey = (date: Date): string =>
-  [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
-
-const fetchETFFlowPageForTradingDay = async (
-  maximumTimestamp: number,
-): Promise<ETFFlowRecord> => {
-  const response = await fetch(DEFILLAMA_ETF_URL, {
-    headers: { Accept: "text/html" },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) {
-    throw createETFRequestError(
-      `ETF data request failed with HTTP ${response.status}`,
-      isRetryableETFStatus(response.status),
-    );
-  }
-  return parseETFFlowPage(
-    await readETFFlowResponseBody(response),
-    maximumTimestamp,
-  );
-};
-
-const fetchETFFlowRecord = (maximumTimestamp: number): Promise<ETFFlowRecord> =>
-  backOff(() => fetchETFFlowPageForTradingDay(maximumTimestamp), {
-    numOfAttempts: 3,
-    startingDelay: 1000,
-    timeMultiple: 2,
-    jitter: "full",
-    retry: shouldRetryETFFlowFetch,
-  });
-
-const fetchETFFlows = async (tradingDate: Date): Promise<ETFFlowRecord> => {
-  const maximumTimestamp = getTradingDayTimestamp(tradingDate);
-  if (process.env["DISABLE_CACHE"] === "true") {
-    return fetchETFFlowRecord(maximumTimestamp);
-  }
-
-  const cacheKey = getTradingDayCacheKey(tradingDate);
-  const now = Date.now();
-  const cached = etfFlowCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return cached.record;
-  }
-  if (cached) {
-    etfFlowCache.delete(cacheKey);
-  }
-
-  const pending = etfFlowRequests.get(cacheKey);
-  if (pending) return pending;
-
-  const request = fetchETFFlowRecord(maximumTimestamp)
-    .then((record) => {
-      if (
-        process.env["DISABLE_CACHE"] !== "true" &&
-        record.timestamp === maximumTimestamp
-      ) {
-        etfFlowCache.set(cacheKey, {
-          expiresAt: Date.now() + CACHE_TTL_MS,
-          record,
+      if (flow !== null && header.length > 0) {
+        rowFlows.push({
+          ticker: header,
+          name: header,
+          flow,
+          date: rowDate,
         });
       }
-      return record;
-    })
-    .finally(() => {
-      etfFlowRequests.delete(cacheKey);
-    });
-  etfFlowRequests.set(cacheKey, request);
-  return request;
+    }
+
+    if (
+      rowFlows.length > 0 &&
+      (!latestDate ||
+        dateAtMidnightUTC(rowDate) > dateAtMidnightUTC(latestDate))
+    ) {
+      latestFlows = rowFlows;
+      latestDate = rowDate;
+    }
+  }
+
+  if (latestFlows.length === 0) {
+    throw new Error(
+      `No valid ETF flows found on or before ${cutoffDate.toISOString().slice(0, 10)}`,
+    );
+  }
+
+  return latestFlows;
+};
+
+export const parseFlowValue = (text: string): number | null => {
+  if (!text || text === "-" || text === "") return null;
+
+  // Check if value is negative (wrapped in parentheses like "(312.2)")
+  const isNegative = text.startsWith("(") && text.endsWith(")");
+
+  // Remove parentheses, commas, and whitespace
+  const cleaned = text.replace(/[(),\s]/g, "");
+
+  // Handle values like "123.4" or "-45.6"
+  const num = Number.parseFloat(cleaned);
+  if (Number.isNaN(num)) return null;
+
+  return isNegative ? -num : num;
 };
 
 // ============================================================================
-// Formatting and source
+// Formatting
 // ============================================================================
 
 export const formatMillion = (value: number): string => {
@@ -397,50 +582,9 @@ export const formatMillion = (value: number): string => {
   return `-$${absValue}M`;
 };
 
-const buildETFItem = (
-  type: "BTC" | "ETH" | "SOL",
-  usd: number | undefined,
-  url: string,
-) => {
-  if (usd === undefined) {
-    return {
-      text: `${type} ETFs: unavailable`,
-      sentiment: "neutral",
-      url,
-    } as const;
-  }
-
-  const millions = usd / 1_000_000;
-  return {
-    text: `${type} ETFs: ${formatMillion(millions)}`,
-    sentiment: getFlowSentiment(millions),
-    url,
-  } as const;
-};
-
-export const etfFlowsSource: DataSource = {
-  name: "ETF Flows",
-  priority: 3,
-  timeoutMs: 90_000,
-
-  fetch: async (date: Date): Promise<BriefingSection> => {
-    console.log(
-      `[etf-flows] Fetching aggregate flows from ${DEFILLAMA_ETF_URL}`,
-    );
-    const tradingDate = getPreviousTradingDay(date);
-    const record = await fetchETFFlows(tradingDate);
-
-    return {
-      title: `ETF Flows from ${formatTradingDate(new Date(record.timestamp * 1000))}`,
-      icon: "📊",
-      items: [
-        buildETFItem("BTC", record.bitcoinUsd, BTC_ETF_URL),
-        buildETFItem("ETH", record.ethereumUsd, ETH_ETF_URL),
-        buildETFItem("SOL", record.solanaUsd, SOL_ETF_URL),
-      ],
-    };
-  },
-};
+// ============================================================================
+// Mock Data for Testing
+// ============================================================================
 
 export const mockETFFlowsSource: DataSource = {
   name: "ETF Flows",
@@ -448,13 +592,26 @@ export const mockETFFlowsSource: DataSource = {
 
   fetch: async (date: Date): Promise<BriefingSection> => {
     const tradingDate = getPreviousTradingDay(date);
+
     return {
       title: `ETF Flows from ${formatTradingDate(tradingDate)}`,
       icon: "📊",
       items: [
-        buildETFItem("BTC", 145_200_000, BTC_ETF_URL),
-        buildETFItem("ETH", -23_100_000, ETH_ETF_URL),
-        buildETFItem("SOL", 18_700_000, SOL_ETF_URL),
+        {
+          text: "BTC ETFs: +$145.2M",
+          sentiment: "positive",
+          url: BTC_ETF_URL,
+        },
+        {
+          text: "ETH ETFs: -$23.1M",
+          sentiment: "negative",
+          url: ETH_ETF_URL,
+        },
+        {
+          text: "SOL ETFs: +$18.7M",
+          sentiment: "positive",
+          url: SOL_ETF_URL,
+        },
       ],
     };
   },
