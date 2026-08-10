@@ -138,6 +138,14 @@ describe("scoreEvent", () => {
       expect(scoreEvent(event)).toBe(15);
     });
 
+    it("scores TradingView's US headline CPI label at 15", () => {
+      const event = createEvent({
+        title: "Inflation Rate YoY",
+        country: "US",
+      });
+      expect(scoreEvent(event)).toBe(15);
+    });
+
     it("scores ECB Interest Rate Decision at 12 (10 * 1.2 EU weight)", () => {
       const event = createEvent({
         title: "ECB Interest Rate Decision",

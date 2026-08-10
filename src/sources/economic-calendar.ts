@@ -217,6 +217,10 @@ const MARKET_IMPACT_INDICATORS: ReadonlyMap<string, number> = new Map([
   // Tier 1 — Score 10
   ["nonfarm payrolls", 10],
   ["consumer price index", 10],
+  // TradingView labels the headline US CPI release "Inflation Rate YoY".
+  // Treat it as CPI so the weekend week-ahead ranking does not bury it below
+  // lower-impact foreign GDP releases.
+  ["inflation rate yoy", 10],
   [" cpi", 10], // leading space avoids false matches like "recipe"
   ["interest rate decision", 10],
   ["fed funds rate", 10],

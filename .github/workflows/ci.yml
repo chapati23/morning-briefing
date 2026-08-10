@@ -74,4 +74,5 @@ jobs:
             --image=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/morning-briefing/app:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --platform=managed \
+            --update-env-vars=PUPPETEER_CACHE_DIR=/app/.cache/puppeteer \
             --quiet

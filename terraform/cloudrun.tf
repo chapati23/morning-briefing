@@ -66,6 +66,14 @@ resource "google_cloud_run_v2_service" "morning_briefing" {
         value = google_storage_bucket.data.name
       }
 
+      # Keep the runtime path aligned with the Chrome cache baked into the
+      # image. This also replaces the obsolete /home/pptruser cache setting
+      # left on existing Cloud Run revisions.
+      env {
+        name  = "PUPPETEER_CACHE_DIR"
+        value = "/app/.cache/puppeteer"
+      }
+
       ports {
         container_port = 8080
       }
